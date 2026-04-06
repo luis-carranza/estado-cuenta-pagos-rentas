@@ -1,0 +1,43 @@
+# ── Python ───────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environment
+.venv/
+venv/
+ENV/
+
+# ── Data / Sensitive files ────────────────────────────────
+*.xlsx
+*.xls
+*.csv
+*.env
+.env*
+*.secret
+
+# ── Node / Frontend ───────────────────────────────────────
+frontend/node_modules/
+frontend/dist/
+frontend/.cache/
+frontend/coverage/
+
+# ── IDE ───────────────────────────────────────────────────
+.idea/
+.vscode/
+*.iml
+
+# ── OS ────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Logs ─────────────────────────────────────────────────
+*.log
+nohup.out
+
