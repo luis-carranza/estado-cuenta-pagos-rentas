@@ -14,7 +14,7 @@ export default function Navbar({ active, onChange }) {
   return (
     <nav className="navbar">
       <div className="navbar-brand">
-        <Building2 size={22} /> Estado de Cuenta
+        <Building2 size={22} /> RISKOS DIVISION RENTAS
       </div>
       <div className="navbar-tabs">
         {TABS.map((tab) => {
