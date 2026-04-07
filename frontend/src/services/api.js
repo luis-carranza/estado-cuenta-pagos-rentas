@@ -8,6 +8,8 @@ export const updatePago      = (id,d) => api.put(`/api/pagos/${id}`, d).then(r=>
 export const deletePago      = (id)   => api.delete(`/api/pagos/${id}`).then(r=>r.data);
 
 export const getProjects     = ()     => api.get('/api/projects').then(r=>r.data);
+export const getProject      = (id)   => api.get(`/api/projects/${id}`).then(r=>r.data);
+export const getProjectBudget= (id)   => api.get(`/api/projects/${id}/budget`).then(r=>r.data);
 export const createProject   = (d)    => api.post('/api/projects', d).then(r=>r.data);
 export const updateProject   = (id,d) => api.put(`/api/projects/${id}`, d).then(r=>r.data);
 export const deleteProject   = (id)   => api.delete(`/api/projects/${id}`).then(r=>r.data);

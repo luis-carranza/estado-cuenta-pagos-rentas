@@ -118,16 +118,49 @@ body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f4f8; color: #
 .card-actions { display: flex; gap: 6px; }
 
 /* ── Projects grid ── */
-.projects-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
-.project-card { background: #fff; border-radius: 10px; padding: 16px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); border: 1px solid #e3e9f0; }
-.project-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+.projects-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+.project-card { background: #fff; border-radius: 10px; padding: 16px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); border: 1px solid #e3e9f0; display: flex; flex-direction: column; gap: 4px; }
+.project-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; }
 .project-name { font-weight: 700; font-size: 15px; color: #1a3a6b; }
-.project-meta { font-size: 12px; color: #666; margin: 4px 0; }
-.project-desc { font-size: 12px; color: #555; margin: 6px 0; }
-.project-stats { display: flex; gap: 8px; margin: 10px 0; }
+.project-meta { font-size: 12px; color: #666; margin: 2px 0; }
+.project-desc { font-size: 12px; color: #555; margin: 4px 0; }
+.project-stats { display: flex; gap: 6px; margin: 6px 0; flex-wrap: wrap; }
 .stat-pill { padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
 .stat-pill.total { background: #e3f2fd; color: #1565c0; }
 .stat-pill.avail { background: #e8f5e9; color: #2e7d32; }
+.stat-pill.occ   { background: #f3e8ff; color: #6a1b9a; }
+.project-budget-row { display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 2px 0; }
+.project-budget-label { color: #666; }
+.project-budget-value { font-weight: 700; color: #1a3a6b; margin-left: auto; }
+.project-card-actions { display: flex; gap: 8px; margin-top: 10px; }
+
+/* ── Project detail tabs ── */
+.detail-tabs { display: flex; gap: 4px; border-bottom: 2px solid #e3e9f0; padding-bottom: 0; }
+.detail-tab { background: none; border: none; border-bottom: 3px solid transparent; padding: 10px 18px; cursor: pointer; font-size: 13px; font-weight: 600; color: #666; display: flex; align-items: center; gap: 6px; margin-bottom: -2px; transition: all 0.15s; border-radius: 6px 6px 0 0; }
+.detail-tab:hover { color: #1a3a6b; background: #f0f4fb; }
+.detail-tab.active { color: #1a3a6b; border-bottom-color: #1a3a6b; background: #fff; }
+
+/* ── Project detail meta bar ── */
+.project-detail-meta { display: flex; align-items: center; gap: 20px; padding: 10px 16px; font-size: 13px; flex-wrap: wrap; }
+
+/* ── KPI cards ── */
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
+.kpi-card { background: #fff; border-radius: 10px; padding: 14px 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); border: 1px solid #e3e9f0; display: flex; align-items: center; gap: 14px; }
+.kpi-icon { width: 42px; height: 42px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.kpi-body { flex: 1; min-width: 0; }
+.kpi-value { font-size: 20px; font-weight: 700; line-height: 1.1; }
+.kpi-label { font-size: 11px; color: #666; margin-top: 2px; font-weight: 600; }
+.kpi-sub   { font-size: 11px; color: #999; margin-top: 1px; }
+
+/* ── Occupancy bar ── */
+.occ-bar-wrap { display: flex; align-items: center; gap: 12px; }
+.occ-bar-bg  { flex: 1; height: 14px; background: #e3e9f0; border-radius: 7px; overflow: hidden; }
+.occ-bar-fill { height: 100%; border-radius: 7px; transition: width 0.4s ease; }
+.occ-bar-label { font-size: 16px; font-weight: 700; min-width: 48px; text-align: right; }
+
+/* ── Google Map iframe ── */
+.project-map { width: 100%; height: 480px; border: none; display: block; }
+.map-coords-badge { position: absolute; top: 10px; left: 10px; z-index: 1; background: rgba(255,255,255,0.92); border-radius: 6px; padding: 4px 10px; font-size: 12px; font-weight: 600; color: #1a3a6b; box-shadow: 0 2px 8px rgba(0,0,0,0.15); pointer-events: none; }
 
 /* ── Units toolbar ── */
 .units-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }

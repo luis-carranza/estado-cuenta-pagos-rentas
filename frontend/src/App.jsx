@@ -1,20 +1,22 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Toaster, toast } from 'react-hot-toast';
-import Navbar         from './components/Navbar';
-import Header         from './components/Header';
-import ResumenPagos   from './components/ResumenPagos';
-import PagosTable     from './components/PagosTable';
-import PagoModal      from './components/PagoModal';
-import ProjectsPage   from './components/ProjectsPage';
-import UnitsPage      from './components/UnitsPage';
-import ContractsPage  from './components/ContractsPage';
+import Navbar              from './components/Navbar';
+import Header              from './components/Header';
+import ResumenPagos        from './components/ResumenPagos';
+import PagosTable          from './components/PagosTable';
+import PagoModal           from './components/PagoModal';
+import ProjectsPage        from './components/ProjectsPage';
+import ProjectDetailsPage  from './components/ProjectDetailsPage';
+import UnitsPage           from './components/UnitsPage';
+import ContractsPage       from './components/ContractsPage';
 import { getEstadoCuenta, getPagos, createPago, updatePago, deletePago } from './services/api';
 import './App.css';
 
 export default function App() {
   const [tab, setTab]           = useState('estado');
-  const [selProject, setProj]   = useState(null);  // for Units page
-  const [selUnit, setUnit]       = useState(null);   // for Contracts page
+  const [selProject, setProj]   = useState(null);
+  const [detailProject, setDetailProj] = useState(null); // for details page
+  const [selUnit, setUnit]       = useState(null);
 
   // Estado de Cuenta state
   const [estadoCuenta, setEC]   = useState(null);
@@ -58,17 +60,21 @@ export default function App() {
     catch { toast.error('Error eliminando pago'); }
   };
 
-  // Navigate to units when project selected from ProjectsPage
   const handleSelectProject = (p) => { setProj(p); setTab('units'); };
-  // Navigate to contracts when unit selected from UnitsPage
+  const handleViewDetails   = (p) => { setDetailProj(p); setTab('project-details'); };
   const handleSelectUnit    = (u) => { setUnit(u); setTab('contracts'); };
+
+  const handleNavChange = t => {
+    setTab(t);
+    if (!['units','contracts','project-details'].includes(t)) {
+      setProj(null); setUnit(null); setDetailProj(null);
+    }
+  };
 
   return (
     <div className="app-wrapper">
       <Toaster position="top-right" toastOptions={{ duration: 3000 }} />
-      <Navbar active={tab} onChange={t => { setTab(t);
-        if (t !== 'units' && t !== 'contracts') { setProj(null); setUnit(null); }
-      }} />
+      <Navbar active={tab} onChange={handleNavChange} />
 
       <main className="app-container">
 
@@ -111,7 +117,19 @@ export default function App() {
 
         {/* ── Proyectos ── */}
         {tab === 'projects' && (
-          <ProjectsPage onSelectProject={handleSelectProject} />
+          <ProjectsPage
+            onSelectProject={handleSelectProject}
+            onViewDetails={handleViewDetails}
+          />
+        )}
+
+        {/* ── Project Details ── */}
+        {tab === 'project-details' && detailProject && (
+          <ProjectDetailsPage
+            project={detailProject}
+            onBack={() => setTab('projects')}
+            onEditProject={p => { setDetailProj(p); }}
+          />
         )}
 
         {/* ── Unidades ── */}
@@ -127,16 +145,17 @@ export default function App() {
         {/* ── Contratos ── */}
         {tab === 'contracts' && selUnit && (
           <ContractsPage unit={selUnit} project={selProject}
-            onBack={() => { setTab('units'); }} />
+            onBack={() => setTab('units')} />
         )}
         {tab === 'contracts' && !selUnit && (
           <div className="empty-state">Selecciona una unidad desde la pestaña Unidades.</div>
         )}
 
-        {/* ── Documentos (global view) ── */}
+        {/* ── Documentos ── */}
         {tab === 'documents' && (
-          <div className="page-header"><h2 className="page-title">📁 Documentos</h2>
-            <p style={{color:'#666',marginTop:'8px'}}>Accede a los documentos desde una unidad o contrato específico usando el botón "Docs".</p>
+          <div className="page-header">
+            <h2 className="page-title">📁 Documentos</h2>
+            <p style={{color:'#666',marginTop:'8px'}}>Accede a documentos desde un proyecto, unidad o contrato específico.</p>
           </div>
         )}
       </main>

@@ -35,11 +35,15 @@ def init_db():
     conn = get_db()
     conn.executescript("""
     CREATE TABLE IF NOT EXISTS projects (
-        id          INTEGER PRIMARY KEY AUTOINCREMENT,
-        name        TEXT NOT NULL,
-        description TEXT,
-        address     TEXT,
-        created_at  TEXT DEFAULT (datetime('now'))
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        name         TEXT NOT NULL,
+        description  TEXT,
+        address      TEXT,
+        latitude     REAL,
+        longitude    REAL,
+        total_budget REAL,
+        budget_notes TEXT,
+        created_at   TEXT DEFAULT (datetime('now'))
     );
     CREATE TABLE IF NOT EXISTS units (
         id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -96,6 +100,17 @@ def init_db():
         year                INTEGER
     );
     """)
+    # Migrate existing DB – add new columns if they don't exist yet
+    for col, dfn in [
+        ("latitude",     "REAL"),
+        ("longitude",    "REAL"),
+        ("total_budget", "REAL"),
+        ("budget_notes", "TEXT"),
+    ]:
+        try:
+            conn.execute(f"ALTER TABLE projects ADD COLUMN {col} {dfn}")
+        except Exception:
+            pass   # column already exists
     conn.commit()
 
     # Seed pagos from Excel if table is empty
@@ -150,6 +165,10 @@ class ProjectIn(BaseModel):
     name: str
     description: Optional[str] = None
     address: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    total_budget: Optional[float] = None
+    budget_notes: Optional[str] = None
 
 class UnitIn(BaseModel):
     unit_number: str
@@ -301,8 +320,10 @@ def delete_pago(consecutivo: int):
 def get_projects():
     conn = get_db()
     rows = conn.execute("""
-        SELECT p.*, COUNT(u.id) as unit_count,
-               SUM(CASE WHEN u.is_available=1 THEN 1 ELSE 0 END) as available_units
+        SELECT p.*,
+               COUNT(u.id) as unit_count,
+               SUM(CASE WHEN u.is_available=1 THEN 1 ELSE 0 END) as available_units,
+               SUM(CASE WHEN u.is_available=0 THEN u.rent_price ELSE 0 END) as monthly_income
         FROM projects p LEFT JOIN units u ON u.project_id=p.id
         GROUP BY p.id ORDER BY p.name""").fetchall()
     conn.close()
@@ -316,11 +337,65 @@ def get_project(pid: int):
     if not row: raise HTTPException(404, "Proyecto no encontrado")
     return row_to_dict(row)
 
+@app.get("/api/projects/{pid}/budget")
+def get_project_budget(pid: int):
+    conn = get_db()
+    proj = conn.execute("SELECT * FROM projects WHERE id=?", (pid,)).fetchone()
+    if not proj: raise HTTPException(404, "Proyecto no encontrado")
+
+    units = conn.execute("SELECT * FROM units WHERE project_id=?", (pid,)).fetchall()
+    total_units    = len(units)
+    occupied_units = sum(1 for u in units if not u["is_available"])
+    rent_potential = sum((u["rent_price"] or 0) for u in units)
+    rent_actual    = sum((u["rent_price"] or 0) for u in units if not u["is_available"])
+
+    contracts = conn.execute("""
+        SELECT c.monthly_rent, c.status, c.tenant_name, c.start_date, c.end_date,
+               u.unit_number
+        FROM contracts c JOIN units u ON u.id=c.unit_id
+        WHERE u.project_id=?""", (pid,)).fetchall()
+    active_contracts  = [c for c in contracts if c["status"] == "ACTIVO"]
+    contract_income   = sum(c["monthly_rent"] or 0 for c in active_contracts)
+
+    payments = conn.execute(
+        "SELECT SUM(monto) as total FROM pagos WHERE project_id=?", (pid,)).fetchone()
+    total_collected = payments["total"] or 0
+
+    # breakdown by unit_type
+    breakdown = {}
+    for u in units:
+        t = u["unit_type"] or "OTRO"
+        if t not in breakdown:
+            breakdown[t] = {"total": 0, "occupied": 0, "rent_sum": 0}
+        breakdown[t]["total"] += 1
+        if not u["is_available"]:
+            breakdown[t]["occupied"] += 1
+            breakdown[t]["rent_sum"] += (u["rent_price"] or 0)
+
+    conn.close()
+    return {
+        "project": row_to_dict(proj),
+        "total_units": total_units,
+        "occupied_units": occupied_units,
+        "available_units": total_units - occupied_units,
+        "occupancy_rate": round(occupied_units / total_units * 100, 1) if total_units else 0,
+        "monthly_rent_potential": rent_potential,
+        "monthly_rent_actual": rent_actual,
+        "contract_income": contract_income,
+        "active_contracts": len(active_contracts),
+        "total_payments_collected": total_collected,
+        "user_budget": proj["total_budget"] or 0,
+        "budget_notes": proj["budget_notes"],
+        "unit_type_breakdown": breakdown,
+        "contracts": [dict(c) for c in active_contracts],
+    }
+
 @app.post("/api/projects", status_code=201)
 def create_project(p: ProjectIn):
     conn = get_db()
-    cur = conn.execute("INSERT INTO projects (name,description,address) VALUES (?,?,?)",
-                       (p.name, p.description, p.address))
+    cur = conn.execute(
+        "INSERT INTO projects (name,description,address,latitude,longitude,total_budget,budget_notes) VALUES (?,?,?,?,?,?,?)",
+        (p.name, p.description, p.address, p.latitude, p.longitude, p.total_budget, p.budget_notes))
     conn.commit()
     row = conn.execute("SELECT * FROM projects WHERE id=?", (cur.lastrowid,)).fetchone()
     conn.close()
@@ -329,8 +404,9 @@ def create_project(p: ProjectIn):
 @app.put("/api/projects/{pid}")
 def update_project(pid: int, p: ProjectIn):
     conn = get_db()
-    conn.execute("UPDATE projects SET name=?,description=?,address=? WHERE id=?",
-                 (p.name, p.description, p.address, pid))
+    conn.execute(
+        "UPDATE projects SET name=?,description=?,address=?,latitude=?,longitude=?,total_budget=?,budget_notes=? WHERE id=?",
+        (p.name, p.description, p.address, p.latitude, p.longitude, p.total_budget, p.budget_notes, pid))
     conn.commit()
     row = conn.execute("SELECT * FROM projects WHERE id=?", (pid,)).fetchone()
     conn.close()
