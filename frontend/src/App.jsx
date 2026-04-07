@@ -10,6 +10,7 @@ import ProjectDetailsPage  from './components/ProjectDetailsPage';
 import UnitsPage           from './components/UnitsPage';
 import ContractsPage       from './components/ContractsPage';
 import { getEstadoCuenta, getPagos, createPago, updatePago, deletePago } from './services/api';
+import { getProjects } from './services/api';
 import './App.css';
 
 export default function App() {
@@ -27,9 +28,15 @@ export default function App() {
   const [editPago, setEditPago]  = useState(null);
 
   // Filters
-  const [filterMonth, setMonth]  = useState('');
-  const [filterYear, setYear]    = useState('');
-  const [filterProject, setFP]   = useState('');
+  const [filterMonth, setMonth]    = useState('');
+  const [filterYear, setYear]      = useState('');
+  const [filterProject, setFP]     = useState('');
+  const [projectList, setProjectList] = useState([]);
+
+  // Load project list once for the filter dropdown
+  useEffect(() => {
+    getProjects().then(setProjectList).catch(() => {});
+  }, []);
 
   const fetchAll = useCallback(async () => {
     try {
@@ -93,8 +100,14 @@ export default function App() {
                 <option value="">Todos los años</option>
                 {[2024,2025,2026,2027].map(y => <option key={y} value={y}>{y}</option>)}
               </select>
+              <select className="project-select" value={filterProject} onChange={e => setFP(e.target.value)}>
+                <option value="">Todos los proyectos</option>
+                {projectList.map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
               <button className="btn-primary btn-sm" onClick={fetchAll}>Aplicar</button>
-              {(filterMonth||filterYear||filterProject) &&
+              {(filterMonth || filterYear || filterProject) &&
                 <button className="btn-clear" onClick={() => { setMonth(''); setYear(''); setFP(''); }}>Limpiar</button>}
             </div>
 
@@ -102,7 +115,11 @@ export default function App() {
             {error   && <div className="error-banner">⚠️ {error}<button onClick={fetchAll} className="retry-btn">Reintentar</button></div>}
             {!loading && !error && (
               <>
-                <Header header={estadoCuenta?.header} />
+                <Header header={estadoCuenta?.header}
+                  activeProject={filterProject
+                    ? (projectList.find(p => String(p.id) === String(filterProject))?.name)
+                    : null}
+                />
                 <ResumenPagos resumen={estadoCuenta?.resumen} />
                 <PagosTable pagos={pagos}
                   onNew={() => { setEditPago(null); setModal(true); }}
