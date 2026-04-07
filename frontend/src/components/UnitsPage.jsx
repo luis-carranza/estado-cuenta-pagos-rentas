@@ -7,7 +7,7 @@ import DocumentsPanel from './DocumentsPanel';
 
 const fmt = n => n != null ? new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN'}).format(n) : '—';
 
-export default function UnitsPage({ project, onBack, onSelectUnit }) {
+export default function UnitsPage({ project, onBack, onSelectUnit, hideBackButton = false }) {
   const [units, setUnits]     = useState([]);
   const [modal, setModal]     = useState(null);
   const [docsUnit, setDocsUnit] = useState(null);
@@ -47,8 +47,10 @@ export default function UnitsPage({ project, onBack, onSelectUnit }) {
       {/* ── Header ── */}
       <div className="page-header">
         <div className="breadcrumb">
-          <button className="btn-back" onClick={onBack}><ChevronLeft size={16}/> Proyectos</button>
-          <span className="breadcrumb-sep">/</span>
+          {!hideBackButton && (
+            <button className="btn-back" onClick={onBack}><ChevronLeft size={16}/> Proyectos</button>
+          )}
+          {!hideBackButton && <span className="breadcrumb-sep">/</span>}
           <h2 className="page-title"><Home size={18}/> {project.name} — Unidades</h2>
         </div>
         <div className="units-toolbar">
