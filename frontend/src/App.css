@@ -36,6 +36,12 @@ body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f4f8; color: #
 .periodo-bar { padding: 10px 16px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .periodo-label { font-weight: 600; color: #555; }
 .periodo-bar select { padding: 6px 10px; border: 1px solid #d0d9e8; border-radius: 6px; font-size: 13px; outline: none; background: #fff; }
+.periodo-bar select:focus { border-color: #1a3a6b; }
+.periodo-bar .project-select { border-color: #6a1b9a; color: #6a1b9a; font-weight: 600; }
+.periodo-bar .project-select:focus { border-color: #4a148c; }
+
+/* ── Project filter badge in Header ── */
+.project-filter-badge { display: inline-flex; align-items: center; gap: 5px; background: rgba(255,255,255,0.18); border: 1px solid rgba(255,255,255,0.35); border-radius: 20px; padding: 3px 10px; font-size: 12px; font-weight: 600; color: #fff; }
 
 /* ── Resumen ── */
 .resumen-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; padding: 16px 20px; }

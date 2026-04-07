@@ -6,11 +6,16 @@ function formatDate(dateStr) {
   return d.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-export default function Header({ header }) {
+export default function Header({ header, activeProject }) {
   return (
     <div className="card mb-6">
       <div className="section-header">
         <span className="section-title">ESTADO DE CUENTA</span>
+        {activeProject && (
+          <span className="project-filter-badge">
+            <Building2 size={12}/> {activeProject}
+          </span>
+        )}
       </div>
       <div className="header-info">
         <div className="header-row">
@@ -34,4 +39,3 @@ export default function Header({ header }) {
     </div>
   );
 }
-
