@@ -27,17 +27,19 @@ function KpiCard({ label, value, sub, color='#1a3a6b', IconComponent }) {
 }
 
 // ── Occupancy bar ───────────────────────────────────────────────────────────
-function OccupancyBar({ pct }) {
-  const color = pct >= 80 ? '#2e7d32' : pct >= 50 ? '#e65100' : '#c62828';
+function OccupancyBar({ value }) {
+  const color = value >= 80 ? '#2e7d32' : value >= 50 ? '#e65100' : '#c62828';
   return (
     <div className="occ-bar-wrap">
       <div className="occ-bar-bg">
-        <div className="occ-bar-fill" style={{ width: `${pct}%`, background: color }}/>
+        <div className="occ-bar-fill" style={{ width: `${value}%`, background: color }}/>
       </div>
-      <span className="occ-bar-label" style={{ color }}>{pct}%</span>
+      <span className="occ-bar-label" style={{ color }}>{value}%</span>
     </div>
   );
 }
+
+// ── Documents tab (per project) ──────────────────────────────────────────────
 
 // ── Documents tab (per project) ──────────────────────────────────────────────
 function ProjectDocsTab({ projectId }) {
@@ -198,7 +200,7 @@ export default function ProjectDetailsPage({ project, onBack, onEditProject }) {
               <span style={{fontWeight:700,color:'#1a3a6b'}}>Tasa de Ocupación</span>
               <span style={{fontSize:12,color:'#666'}}>{budget.occupied_units} / {budget.total_units} unidades</span>
             </div>
-            <OccupancyBar pct={budget.occupancy_rate}/>
+            <OccupancyBar value={budget.occupancy_rate}/>
           </div>
 
           {/* Unit type breakdown */}
@@ -362,6 +364,9 @@ export default function ProjectDetailsPage({ project, onBack, onEditProject }) {
     </div>
   );
 }
+
+
+
 
 
 

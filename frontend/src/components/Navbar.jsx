@@ -9,18 +9,23 @@ const TABS = [
 ];
 
 export default function Navbar({ active, onChange }) {
+  // treat project-details as part of the projects section
+  const effectiveActive = active === 'project-details' ? 'projects' : active;
   return (
     <nav className="navbar">
       <div className="navbar-brand">
         <Building2 size={22} /> Estado de Cuenta
       </div>
       <div className="navbar-tabs">
-        {TABS.map(({ key, label, icon: Icon }) => (
-          <button key={key} className={`nav-tab ${active === key ? 'active' : ''}`}
-            onClick={() => onChange(key)}>
-            <Icon size={15} /> {label}
-          </button>
-        ))}
+        {TABS.map((tab) => {
+          const Icon = tab.icon;
+          return (
+            <button key={tab.key} className={`nav-tab ${effectiveActive === tab.key ? 'active' : ''}`}
+              onClick={() => onChange(tab.key)}>
+              <Icon size={15} /> {tab.label}
+            </button>
+          );
+        })}
       </div>
     </nav>
   );
