@@ -25,6 +25,11 @@ export const createUnit      = (pid,d)=> api.post(`/api/projects/${pid}/units`, 
 export const updateUnit      = (id,d) => api.put(`/api/units/${id}`, d).then(r=>r.data);
 export const deleteUnit      = (id)   => api.delete(`/api/units/${id}`).then(r=>r.data);
 
+export const getUnitServices    = (uid)    => api.get(`/api/units/${uid}/services`).then(r=>r.data);
+export const createUnitService  = (uid, d) => api.post(`/api/units/${uid}/services`, d).then(r=>r.data);
+export const updateUnitService  = (sid, d) => api.put(`/api/unit-services/${sid}`, d).then(r=>r.data);
+export const deleteUnitService  = (sid)    => api.delete(`/api/unit-services/${sid}`).then(r=>r.data);
+
 export const getContracts    = (uid)  => api.get(`/api/units/${uid}/contracts`).then(r=>r.data);
 export const createContract  = (uid,d)=> api.post(`/api/units/${uid}/contracts`, d).then(r=>r.data);
 export const updateContract  = (id,d) => api.put(`/api/contracts/${id}`, d).then(r=>r.data);
@@ -196,6 +201,8 @@ import DocumentsPanel from './DocumentsPanel';
 
 const fmt = n => n != null ? new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN'}).format(n) : '—';
 
+const SVC_BADGE = { PAGADO:'svc-pagado', PENDIENTE:'svc-pendiente', VENCIDO:'svc-vencido' };
+
 export default function UnitsPage({ project, onBack, onSelectUnit }) {
   const [units, setUnits] = useState([]);
   const [modal, setModal] = useState(null);
@@ -249,6 +256,16 @@ export default function UnitsPage({ project, onBack, onSelectUnit }) {
             <div className={`availability-badge ${u.is_available ? 'free' : 'taken'}`}>
               {u.is_available ? 'Disponible' : `Ocupada${u.current_tenant ? ` — ${u.current_tenant}` : ''}`}
             </div>
+            {u.services && u.services.length > 0 && (
+              <div className="unit-services">
+                {u.services.map(svc => (
+                  <span key={svc.id} className={`svc-badge ${SVC_BADGE[svc.status] || 'svc-pendiente'}`}
+                        title={svc.service_name}>
+                    {svc.service_name.charAt(0)}{svc.service_name.length > 1 ? svc.service_name.slice(1,3).toLowerCase() : ''}
+                  </span>
+                ))}
+              </div>
+            )}
             {u.notes && <p className="unit-notes">{u.notes}</p>}
             <div className="unit-actions">
               <button className="btn-outline flex-1" onClick={() => onSelectUnit(u)}>
@@ -276,23 +293,82 @@ export default function UnitsPage({ project, onBack, onSelectUnit }) {
 # ── components/UnitModal.jsx ──────────────────────────────────────────────────
 files["components/UnitModal.jsx"] = r"""
 import { useState, useEffect } from 'react';
-import { X } from 'lucide-react';
+import { X, Plus, Trash2 } from 'lucide-react';
+import { toast } from 'react-hot-toast';
+import { getUnitServices, createUnitService, updateUnitService, deleteUnitService } from '../services/api';
 
 const empty = { unit_number:'', unit_type:'DEPTO', purpose:'RENTA', floor:'', area_sqm:'',
-                rent_price:'', sale_price:'', is_available:true, notes:'' };
+                rent_price:'', sale_price:'', is_available:true, current_tenant:'', notes:'' };
 const TYPES = ['DEPTO','LOCAL','OFICINA','BODEGA','CASA','COMERCIAL','OTRO'];
+const SVC_STATUS = ['PENDIENTE','PAGADO','VENCIDO'];
+const STATUS_COLORS = { PAGADO:'svc-pagado', PENDIENTE:'svc-pendiente', VENCIDO:'svc-vencido' };
 
 export default function UnitModal({ unit, onClose, onSave }) {
-  const [form, setForm] = useState(empty);
-  const [saving, setSaving] = useState(false);
-  useEffect(() => { setForm(unit ? { ...empty, ...unit, floor: unit.floor??'', area_sqm: unit.area_sqm??'',
-    rent_price: unit.rent_price??'', sale_price: unit.sale_price??'', is_available: !!unit.is_available } : empty); }, [unit]);
+  const [form, setForm]       = useState(empty);
+  const [saving, setSaving]   = useState(false);
+  const [services, setServices] = useState([]);
+  const [newSvc, setNewSvc]   = useState({ service_name:'', status:'PENDIENTE' });
+  const [addingSvc, setAddingSvc] = useState(false);
 
-  const set = e => { const {name, value, type, checked} = e.target; setForm(f => ({...f, [name]: type==='checkbox' ? checked : value})); };
-  const submit = async e => { e.preventDefault(); setSaving(true);
-    try { await onSave({ ...form, floor: form.floor||null, area_sqm: form.area_sqm||null,
-      rent_price: form.rent_price||null, sale_price: form.sale_price||null }); }
-    finally { setSaving(false); }
+  useEffect(() => {
+    setForm(unit ? {
+      ...empty, ...unit,
+      floor: unit.floor ?? '',
+      area_sqm: unit.area_sqm ?? '',
+      rent_price: unit.rent_price ?? '',
+      sale_price: unit.sale_price ?? '',
+      current_tenant: unit.current_tenant ?? '',
+      is_available: !!unit.is_available
+    } : empty);
+    if (unit?.id) {
+      getUnitServices(unit.id).then(setServices).catch(() => {});
+    } else {
+      setServices([]);
+    }
+  }, [unit]);
+
+  const set = e => {
+    const { name, value, type, checked } = e.target;
+    setForm(f => ({ ...f, [name]: type === 'checkbox' ? checked : value }));
+  };
+
+  const submit = async e => {
+    e.preventDefault(); setSaving(true);
+    try {
+      await onSave({
+        ...form,
+        floor: form.floor || null,
+        area_sqm: form.area_sqm || null,
+        rent_price: form.rent_price || null,
+        sale_price: form.sale_price || null,
+        current_tenant: form.current_tenant || null,
+      });
+    } finally { setSaving(false); }
+  };
+
+  const handleSvcStatusChange = async (svc, newStatus) => {
+    try {
+      const updated = await updateUnitService(svc.id, { ...svc, status: newStatus });
+      setServices(ss => ss.map(s => s.id === svc.id ? updated : s));
+    } catch { toast.error('Error actualizando servicio'); }
+  };
+
+  const handleAddSvc = async () => {
+    if (!newSvc.service_name.trim()) return;
+    if (!unit?.id) { toast.error('Guarda la unidad primero para añadir servicios'); return; }
+    try {
+      const created = await createUnitService(unit.id, { ...newSvc, service_name: newSvc.service_name.trim().toUpperCase() });
+      setServices(ss => [...ss, created]);
+      setNewSvc({ service_name: '', status: 'PENDIENTE' });
+      setAddingSvc(false);
+    } catch { toast.error('Error añadiendo servicio'); }
+  };
+
+  const handleDeleteSvc = async (sid) => {
+    try {
+      await deleteUnitService(sid);
+      setServices(ss => ss.filter(s => s.id !== sid));
+    } catch { toast.error('Error eliminando servicio'); }
   };
 
   return (
@@ -312,6 +388,8 @@ export default function UnitModal({ unit, onClose, onSave }) {
             <div className="form-group"><label>Propósito</label>
               <select name="purpose" value={form.purpose} onChange={set}>
                 <option value="RENTA">RENTA</option><option value="VENTA">VENTA</option></select></div>
+            <div className="form-group"><label>Inquilino / Cliente</label>
+              <input name="current_tenant" value={form.current_tenant} onChange={set} placeholder="Nombre del inquilino"/></div>
             <div className="form-group"><label>Piso</label>
               <input type="number" name="floor" value={form.floor} onChange={set}/></div>
             <div className="form-group"><label>Área (m²)</label>
@@ -329,6 +407,55 @@ export default function UnitModal({ unit, onClose, onSave }) {
             <div className="form-group full-width"><label>Notas</label>
               <textarea name="notes" value={form.notes} onChange={set} rows={2} style={{resize:'vertical'}}/></div>
           </div>
+
+          {unit?.id && (
+            <div className="services-section">
+              <div className="services-header">
+                <span className="services-title">Servicios</span>
+                <button type="button" className="btn-sm-outline" onClick={() => setAddingSvc(v => !v)}>
+                  <Plus size={12}/> Agregar
+                </button>
+              </div>
+              {addingSvc && (
+                <div className="svc-add-row">
+                  <input
+                    className="svc-name-input"
+                    placeholder="Nombre del servicio (ej. INTERNET)"
+                    value={newSvc.service_name}
+                    onChange={e => setNewSvc(v => ({ ...v, service_name: e.target.value }))}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddSvc(); } }}
+                  />
+                  <select
+                    value={newSvc.status}
+                    onChange={e => setNewSvc(v => ({ ...v, status: e.target.value }))}
+                  >
+                    {SVC_STATUS.map(s => <option key={s}>{s}</option>)}
+                  </select>
+                  <button type="button" className="btn-primary btn-sm" onClick={handleAddSvc}>Añadir</button>
+                  <button type="button" className="btn-secondary btn-sm" onClick={() => setAddingSvc(false)}>×</button>
+                </div>
+              )}
+              <div className="services-list">
+                {services.length === 0 && <span className="svc-empty">Sin servicios registrados</span>}
+                {services.map(svc => (
+                  <div key={svc.id} className="svc-row">
+                    <span className="svc-name">{svc.service_name}</span>
+                    <select
+                      className={`svc-status-select ${STATUS_COLORS[svc.status] || ''}`}
+                      value={svc.status}
+                      onChange={e => handleSvcStatusChange(svc, e.target.value)}
+                    >
+                      {SVC_STATUS.map(s => <option key={s}>{s}</option>)}
+                    </select>
+                    <button type="button" className="action-btn delete-btn" onClick={() => handleDeleteSvc(svc.id)}>
+                      <Trash2 size={12}/>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="modal-actions">
             <button type="button" className="btn-secondary" onClick={onClose}>Cancelar</button>
             <button type="submit" className="btn-primary" disabled={saving}>{saving?'Guardando...':'Guardar'}</button>
