@@ -28,3 +28,21 @@ export const getDocuments    = (p={}) => api.get('/api/documents', { params: p }
 export const deleteDocument  = (id)   => api.delete(`/api/documents/${id}`).then(r=>r.data);
 export const uploadDocument  = (formData) =>
   axios.post('/api/documents/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' }}).then(r=>r.data);
+
+// ── Bank Statements ──────────────────────────────────────────────────────────
+export const getBankStatements     = (p={})    => api.get('/api/bank-statements', { params: p }).then(r=>r.data);
+export const getBankStatement      = (id)      => api.get(`/api/bank-statements/${id}`).then(r=>r.data);
+export const createBankStatement   = (d)       => api.post('/api/bank-statements', d).then(r=>r.data);
+export const updateBankStatement   = (id,d)    => api.put(`/api/bank-statements/${id}`, d).then(r=>r.data);
+export const deleteBankStatement   = (id)      => api.delete(`/api/bank-statements/${id}`).then(r=>r.data);
+
+export const getStatementLines     = (sid)     => api.get(`/api/bank-statements/${sid}/lines`).then(r=>r.data);
+export const createStatementLine   = (sid,d)   => api.post(`/api/bank-statements/${sid}/lines`, d).then(r=>r.data);
+export const bulkCreateLines       = (sid,arr) => api.post(`/api/bank-statements/${sid}/lines/bulk`, arr).then(r=>r.data);
+export const updateStatementLine   = (id,d)    => api.put(`/api/bank-statement-lines/${id}`, d).then(r=>r.data);
+export const deleteStatementLine   = (id)      => api.delete(`/api/bank-statement-lines/${id}`).then(r=>r.data);
+
+export const getLineMatches        = (lid)     => api.get(`/api/bank-statement-lines/${lid}/matches`).then(r=>r.data);
+export const createLineMatch       = (lid,d)   => api.post(`/api/bank-statement-lines/${lid}/match`, d).then(r=>r.data);
+export const deleteStatementMatch  = (mid)     => api.delete(`/api/statement-matches/${mid}`).then(r=>r.data);
+

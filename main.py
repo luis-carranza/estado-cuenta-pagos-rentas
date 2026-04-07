@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 import pandas as pd
 from datetime import datetime
 import os, sqlite3, shutil, uuid
@@ -98,6 +98,40 @@ def init_db():
         project_id          INTEGER REFERENCES projects(id),
         month               INTEGER,
         year                INTEGER
+    );
+    CREATE TABLE IF NOT EXISTS bank_statements (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id     INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+        bank_name      TEXT,
+        account_number TEXT,
+        account_alias  TEXT,
+        period_month   INTEGER,
+        period_year    INTEGER,
+        description    TEXT,
+        total_credits  REAL DEFAULT 0,
+        total_debits   REAL DEFAULT 0,
+        created_at     TEXT DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS bank_statement_lines (
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        statement_id     INTEGER NOT NULL REFERENCES bank_statements(id) ON DELETE CASCADE,
+        line_date        TEXT,
+        description      TEXT,
+        reference        TEXT,
+        amount           REAL DEFAULT 0,
+        transaction_type TEXT DEFAULT 'CREDITO',
+        balance          REAL,
+        is_matched       INTEGER DEFAULT 0,
+        notes            TEXT
+    );
+    CREATE TABLE IF NOT EXISTS statement_matches (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        line_id     INTEGER NOT NULL REFERENCES bank_statement_lines(id) ON DELETE CASCADE,
+        unit_id     INTEGER REFERENCES units(id) ON DELETE SET NULL,
+        contract_id INTEGER REFERENCES contracts(id) ON DELETE SET NULL,
+        pago_id     INTEGER REFERENCES pagos(consecutivo) ON DELETE SET NULL,
+        match_notes TEXT,
+        matched_at  TEXT DEFAULT (datetime('now'))
     );
     """)
     # Migrate existing DB – add new columns if they don't exist yet
@@ -206,6 +240,30 @@ class PagoIn(BaseModel):
     project_id: Optional[int] = None
     month: Optional[int] = None
     year: Optional[int] = None
+
+class BankStatementIn(BaseModel):
+    project_id: Optional[int] = None
+    bank_name: Optional[str] = None
+    account_number: Optional[str] = None
+    account_alias: Optional[str] = None
+    period_month: Optional[int] = None
+    period_year: Optional[int] = None
+    description: Optional[str] = None
+
+class BankStatementLineIn(BaseModel):
+    line_date: Optional[str] = None
+    description: Optional[str] = None
+    reference: Optional[str] = None
+    amount: float = 0.0
+    transaction_type: Optional[str] = "CREDITO"
+    balance: Optional[float] = None
+    notes: Optional[str] = None
+
+class StatementMatchIn(BaseModel):
+    unit_id: Optional[int] = None
+    contract_id: Optional[int] = None
+    pago_id: Optional[int] = None
+    match_notes: Optional[str] = None
 
 # ── Routes: Root ─────────────────────────────────────────────────────────────
 @app.get("/")
@@ -591,3 +649,226 @@ def delete_document(did: int):
         conn.commit()
     conn.close()
     return {"message": "Documento eliminado", "id": did}
+
+# ── Routes: Bank Statements ───────────────────────────────────────────────────
+@app.get("/api/bank-statements")
+def get_bank_statements(project_id: Optional[int] = None,
+                        period_month: Optional[int] = None,
+                        period_year: Optional[int] = None):
+    conn = get_db()
+    where, params = [], []
+    if project_id:    where.append("bs.project_id=?");   params.append(project_id)
+    if period_month:  where.append("bs.period_month=?"); params.append(period_month)
+    if period_year:   where.append("bs.period_year=?");  params.append(period_year)
+    clause = ("WHERE " + " AND ".join(where)) if where else ""
+    rows = conn.execute(f"""
+        SELECT bs.*,
+               p.name as project_name,
+               COUNT(bsl.id) as line_count,
+               SUM(CASE WHEN bsl.is_matched=1 THEN 1 ELSE 0 END) as matched_count
+        FROM bank_statements bs
+        LEFT JOIN projects p ON p.id = bs.project_id
+        LEFT JOIN bank_statement_lines bsl ON bsl.statement_id = bs.id
+        {clause}
+        GROUP BY bs.id ORDER BY bs.period_year DESC, bs.period_month DESC, bs.created_at DESC
+    """, params).fetchall()
+    conn.close()
+    return rows_to_list(rows)
+
+@app.get("/api/bank-statements/{sid}")
+def get_bank_statement(sid: int):
+    conn = get_db()
+    row = conn.execute("""
+        SELECT bs.*, p.name as project_name
+        FROM bank_statements bs LEFT JOIN projects p ON p.id=bs.project_id
+        WHERE bs.id=?""", (sid,)).fetchone()
+    conn.close()
+    if not row: raise HTTPException(404, "Estado de banco no encontrado")
+    return row_to_dict(row)
+
+@app.post("/api/bank-statements", status_code=201)
+def create_bank_statement(s: BankStatementIn):
+    conn = get_db()
+    cur = conn.execute("""INSERT INTO bank_statements
+        (project_id,bank_name,account_number,account_alias,period_month,period_year,description)
+        VALUES (?,?,?,?,?,?,?)""",
+        (s.project_id, s.bank_name, s.account_number, s.account_alias,
+         s.period_month, s.period_year, s.description))
+    conn.commit()
+    row = conn.execute("""SELECT bs.*, p.name as project_name
+        FROM bank_statements bs LEFT JOIN projects p ON p.id=bs.project_id
+        WHERE bs.id=?""", (cur.lastrowid,)).fetchone()
+    conn.close()
+    return row_to_dict(row)
+
+@app.put("/api/bank-statements/{sid}")
+def update_bank_statement(sid: int, s: BankStatementIn):
+    conn = get_db()
+    conn.execute("""UPDATE bank_statements SET
+        project_id=?,bank_name=?,account_number=?,account_alias=?,
+        period_month=?,period_year=?,description=? WHERE id=?""",
+        (s.project_id, s.bank_name, s.account_number, s.account_alias,
+         s.period_month, s.period_year, s.description, sid))
+    conn.commit()
+    row = conn.execute("""SELECT bs.*, p.name as project_name
+        FROM bank_statements bs LEFT JOIN projects p ON p.id=bs.project_id
+        WHERE bs.id=?""", (sid,)).fetchone()
+    conn.close()
+    if not row: raise HTTPException(404, "Estado de banco no encontrado")
+    return row_to_dict(row)
+
+@app.delete("/api/bank-statements/{sid}")
+def delete_bank_statement(sid: int):
+    conn = get_db()
+    conn.execute("DELETE FROM bank_statements WHERE id=?", (sid,))
+    conn.commit(); conn.close()
+    return {"message": "Estado de banco eliminado", "id": sid}
+
+# ── Routes: Bank Statement Lines ─────────────────────────────────────────────
+@app.get("/api/bank-statements/{sid}/lines")
+def get_statement_lines(sid: int):
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT bsl.*,
+               (SELECT COUNT(*) FROM statement_matches sm WHERE sm.line_id=bsl.id) as match_count,
+               (SELECT u.unit_number FROM statement_matches sm
+                LEFT JOIN units u ON u.id=sm.unit_id
+                WHERE sm.line_id=bsl.id LIMIT 1) as matched_unit,
+               (SELECT c.tenant_name FROM statement_matches sm
+                LEFT JOIN contracts c ON c.id=sm.contract_id
+                WHERE sm.line_id=bsl.id LIMIT 1) as matched_tenant
+        FROM bank_statement_lines bsl
+        WHERE bsl.statement_id=?
+        ORDER BY bsl.line_date, bsl.id""", (sid,)).fetchall()
+    conn.close()
+    return rows_to_list(rows)
+
+@app.post("/api/bank-statements/{sid}/lines", status_code=201)
+def create_statement_line(sid: int, line: BankStatementLineIn):
+    conn = get_db()
+    # verify statement exists
+    if not conn.execute("SELECT id FROM bank_statements WHERE id=?", (sid,)).fetchone():
+        raise HTTPException(404, "Estado de banco no encontrado")
+    cur = conn.execute("""INSERT INTO bank_statement_lines
+        (statement_id,line_date,description,reference,amount,transaction_type,balance,notes)
+        VALUES (?,?,?,?,?,?,?,?)""",
+        (sid, line.line_date, line.description, line.reference,
+         line.amount, line.transaction_type, line.balance, line.notes))
+    # recalculate totals
+    _recalc_statement_totals(conn, sid)
+    conn.commit()
+    row = conn.execute("SELECT * FROM bank_statement_lines WHERE id=?", (cur.lastrowid,)).fetchone()
+    conn.close()
+    return row_to_dict(row)
+
+@app.post("/api/bank-statements/{sid}/lines/bulk", status_code=201)
+def bulk_create_lines(sid: int, lines: List[BankStatementLineIn]):
+    conn = get_db()
+    if not conn.execute("SELECT id FROM bank_statements WHERE id=?", (sid,)).fetchone():
+        raise HTTPException(404, "Estado de banco no encontrado")
+    inserted = []
+    for line in lines:
+        cur = conn.execute("""INSERT INTO bank_statement_lines
+            (statement_id,line_date,description,reference,amount,transaction_type,balance,notes)
+            VALUES (?,?,?,?,?,?,?,?)""",
+            (sid, line.line_date, line.description, line.reference,
+             line.amount, line.transaction_type, line.balance, line.notes))
+        inserted.append(cur.lastrowid)
+    _recalc_statement_totals(conn, sid)
+    conn.commit()
+    rows = conn.execute(f"SELECT * FROM bank_statement_lines WHERE id IN ({','.join(['?']*len(inserted))})", inserted).fetchall()
+    conn.close()
+    return rows_to_list(rows)
+
+@app.put("/api/bank-statement-lines/{lid}")
+def update_statement_line(lid: int, line: BankStatementLineIn):
+    conn = get_db()
+    row = conn.execute("SELECT statement_id FROM bank_statement_lines WHERE id=?", (lid,)).fetchone()
+    if not row: raise HTTPException(404, "Línea no encontrada")
+    conn.execute("""UPDATE bank_statement_lines SET
+        line_date=?,description=?,reference=?,amount=?,transaction_type=?,balance=?,notes=?
+        WHERE id=?""",
+        (line.line_date, line.description, line.reference, line.amount,
+         line.transaction_type, line.balance, line.notes, lid))
+    _recalc_statement_totals(conn, row["statement_id"])
+    conn.commit()
+    updated = conn.execute("SELECT * FROM bank_statement_lines WHERE id=?", (lid,)).fetchone()
+    conn.close()
+    return row_to_dict(updated)
+
+@app.delete("/api/bank-statement-lines/{lid}")
+def delete_statement_line(lid: int):
+    conn = get_db()
+    row = conn.execute("SELECT statement_id FROM bank_statement_lines WHERE id=?", (lid,)).fetchone()
+    if row:
+        conn.execute("DELETE FROM bank_statement_lines WHERE id=?", (lid,))
+        _recalc_statement_totals(conn, row["statement_id"])
+        conn.commit()
+    conn.close()
+    return {"message": "Línea eliminada", "id": lid}
+
+def _recalc_statement_totals(conn, sid):
+    r = conn.execute("""SELECT
+        COALESCE(SUM(CASE WHEN transaction_type='CREDITO' THEN amount ELSE 0 END),0) as credits,
+        COALESCE(SUM(CASE WHEN transaction_type='DEBITO'  THEN amount ELSE 0 END),0) as debits
+        FROM bank_statement_lines WHERE statement_id=?""", (sid,)).fetchone()
+    conn.execute("UPDATE bank_statements SET total_credits=?,total_debits=? WHERE id=?",
+                 (r["credits"], r["debits"], sid))
+
+# ── Routes: Statement Matches ─────────────────────────────────────────────────
+@app.get("/api/bank-statement-lines/{lid}/matches")
+def get_line_matches(lid: int):
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT sm.*,
+               u.unit_number, u.unit_type,
+               c.tenant_name, c.monthly_rent,
+               p.cliente as pago_cliente, p.concepto as pago_concepto, p.monto as pago_monto
+        FROM statement_matches sm
+        LEFT JOIN units u ON u.id=sm.unit_id
+        LEFT JOIN contracts c ON c.id=sm.contract_id
+        LEFT JOIN pagos p ON p.consecutivo=sm.pago_id
+        WHERE sm.line_id=?""", (lid,)).fetchall()
+    conn.close()
+    return rows_to_list(rows)
+
+@app.post("/api/bank-statement-lines/{lid}/match", status_code=201)
+def create_line_match(lid: int, match: StatementMatchIn):
+    conn = get_db()
+    if not conn.execute("SELECT id FROM bank_statement_lines WHERE id=?", (lid,)).fetchone():
+        raise HTTPException(404, "Línea no encontrada")
+    cur = conn.execute("""INSERT INTO statement_matches
+        (line_id,unit_id,contract_id,pago_id,match_notes)
+        VALUES (?,?,?,?,?)""",
+        (lid, match.unit_id, match.contract_id, match.pago_id, match.match_notes))
+    # mark line as matched
+    conn.execute("UPDATE bank_statement_lines SET is_matched=1 WHERE id=?", (lid,))
+    conn.commit()
+    row = conn.execute("""
+        SELECT sm.*, u.unit_number, u.unit_type,
+               c.tenant_name, c.monthly_rent,
+               p.cliente as pago_cliente, p.concepto as pago_concepto, p.monto as pago_monto
+        FROM statement_matches sm
+        LEFT JOIN units u ON u.id=sm.unit_id
+        LEFT JOIN contracts c ON c.id=sm.contract_id
+        LEFT JOIN pagos p ON p.consecutivo=sm.pago_id
+        WHERE sm.id=?""", (cur.lastrowid,)).fetchone()
+    conn.close()
+    return row_to_dict(row)
+
+@app.delete("/api/statement-matches/{mid}")
+def delete_statement_match(mid: int):
+    conn = get_db()
+    row = conn.execute("SELECT line_id FROM statement_matches WHERE id=?", (mid,)).fetchone()
+    if row:
+        conn.execute("DELETE FROM statement_matches WHERE id=?", (mid,))
+        lid = row["line_id"]
+        remaining = conn.execute("SELECT COUNT(*) FROM statement_matches WHERE line_id=?", (lid,)).fetchone()[0]
+        if remaining == 0:
+            conn.execute("UPDATE bank_statement_lines SET is_matched=0 WHERE id=?", (lid,))
+        conn.commit()
+    conn.close()
+    return {"message": "Coincidencia eliminada", "id": mid}
+
+# ── Routes: Root, Estado de Cuenta, Pagos, Projects, Units, Contracts, Documents ──
+

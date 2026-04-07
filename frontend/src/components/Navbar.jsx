@@ -1,4 +1,4 @@
-import { Building2, FileText, Home, BookOpen, FolderOpen } from 'lucide-react';
+import { Building2, FileText, Home, BookOpen, FolderOpen, Landmark } from 'lucide-react';
 
 const TABS = [
   { key: 'estado',    label: 'Estado de Cuenta', icon: Home },
@@ -6,11 +6,14 @@ const TABS = [
   { key: 'units',     label: 'Unidades',           icon: BookOpen },
   { key: 'contracts', label: 'Contratos',          icon: FileText },
   { key: 'documents', label: 'Documentos',         icon: FolderOpen },
+  { key: 'bancos',    label: 'Bancos',             icon: Landmark },
 ];
 
 export default function Navbar({ active, onChange }) {
-  // treat project-details as part of the projects section
-  const effectiveActive = active === 'project-details' ? 'projects' : active;
+  // treat project-details as part of the projects section; banco-detail as bancos
+  const effectiveActive = active === 'project-details' ? 'projects'
+                        : active === 'banco-detail'    ? 'bancos'
+                        : active;
   return (
     <nav className="navbar">
       <div className="navbar-brand">
