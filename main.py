@@ -1,27 +1,180 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import Optional
 import pandas as pd
 from datetime import datetime
-import os
+import os, sqlite3, shutil, uuid
+from pathlib import Path
 
-app = FastAPI(title="Estado de Cuenta - Pagos Rentas", version="1.0.0")
+# ── Paths ────────────────────────────────────────────────────────────────────
+BASE_DIR   = Path(__file__).parent
+DB_FILE    = BASE_DIR / "app.db"
+UPLOADS    = BASE_DIR / "uploads"
+EXCEL_FILE = BASE_DIR / "edo cuenta pagos rentas Final.xlsx"
+UPLOADS.mkdir(exist_ok=True)
 
+# ── App ──────────────────────────────────────────────────────────────────────
+app = FastAPI(title="Estado de Cuenta API", version="2.0.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://localhost:3000", "http://127.0.0.1:5173", "http://127.0.0.1:5174"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=["http://localhost:5173", "http://localhost:5174",
+                   "http://localhost:3000", "http://127.0.0.1:5173"],
+    allow_credentials=True, allow_methods=["*"], allow_headers=["*"],
 )
 
-EXCEL_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "edo cuenta pagos rentas Final.xlsx")
+# ── Database ─────────────────────────────────────────────────────────────────
+def get_db():
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    return conn
 
+def init_db():
+    conn = get_db()
+    conn.executescript("""
+    CREATE TABLE IF NOT EXISTS projects (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        name        TEXT NOT NULL,
+        description TEXT,
+        address     TEXT,
+        created_at  TEXT DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS units (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id   INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        unit_number  TEXT NOT NULL,
+        unit_type    TEXT DEFAULT 'DEPTO',
+        purpose      TEXT DEFAULT 'RENTA',
+        floor        INTEGER,
+        area_sqm     REAL,
+        rent_price   REAL,
+        sale_price   REAL,
+        is_available INTEGER DEFAULT 1,
+        notes        TEXT
+    );
+    CREATE TABLE IF NOT EXISTS contracts (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        unit_id      INTEGER NOT NULL REFERENCES units(id) ON DELETE CASCADE,
+        tenant_name  TEXT NOT NULL,
+        tenant_email TEXT,
+        tenant_phone TEXT,
+        start_date   TEXT,
+        end_date     TEXT,
+        monthly_rent REAL,
+        deposit      REAL,
+        payment_day  INTEGER DEFAULT 1,
+        status       TEXT DEFAULT 'ACTIVO',
+        notes        TEXT,
+        created_at   TEXT DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS documents (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        related_type  TEXT NOT NULL,
+        related_id    INTEGER NOT NULL,
+        name          TEXT NOT NULL,
+        document_type TEXT DEFAULT 'OTRO',
+        file_name     TEXT NOT NULL,
+        file_size     INTEGER,
+        mime_type     TEXT,
+        uploaded_at   TEXT DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS pagos (
+        consecutivo         INTEGER PRIMARY KEY,
+        fecha               TEXT,
+        ubicacion           TEXT,
+        desarrollo          TEXT,
+        mes_correspondiente TEXT,
+        cliente             TEXT,
+        concepto            TEXT,
+        monto               REAL DEFAULT 0,
+        forma_de_pago       TEXT,
+        semana_fiscal       INTEGER,
+        project_id          INTEGER REFERENCES projects(id),
+        month               INTEGER,
+        year                INTEGER
+    );
+    """)
+    conn.commit()
+
+    # Seed pagos from Excel if table is empty
+    if conn.execute("SELECT COUNT(*) FROM pagos").fetchone()[0] == 0:
+        _seed_from_excel(conn)
+    conn.close()
+
+def _seed_from_excel(conn):
+    if not EXCEL_FILE.exists():
+        return
+    try:
+        df = pd.read_excel(EXCEL_FILE, header=None)
+        for _, row in df.iloc[11:].iterrows():
+            raw_id = row[0]
+            if raw_id is None or (isinstance(raw_id, float) and pd.isna(raw_id)):
+                continue
+            try:
+                consecutivo = int(raw_id)
+            except (ValueError, TypeError):
+                continue
+            fecha = row[1].strftime("%Y-%m-%d") if isinstance(row[1], datetime) else str(row[1]) if pd.notna(row[1]) else None
+            conn.execute("""INSERT OR IGNORE INTO pagos
+                (consecutivo,fecha,ubicacion,desarrollo,mes_correspondiente,
+                 cliente,concepto,monto,forma_de_pago,semana_fiscal,month,year)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""", (
+                consecutivo, fecha,
+                str(row[2]).strip() if pd.notna(row[2]) else None,
+                str(row[3]).strip() if pd.notna(row[3]) else None,
+                str(row[4]).strip() if pd.notna(row[4]) else None,
+                str(row[5]).strip() if pd.notna(row[5]) else None,
+                str(row[6]).strip() if pd.notna(row[6]) else None,
+                float(row[7]) if pd.notna(row[7]) else 0.0,
+                str(row[8]).strip() if pd.notna(row[8]) else None,
+                int(row[9]) if pd.notna(row[9]) else None,
+                3, 2026,
+            ))
+    except Exception as e:
+        print(f"Excel seed warning: {e}")
+    conn.commit()
+
+init_db()
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
+def row_to_dict(row):
+    return dict(row) if row else None
+
+def rows_to_list(rows):
+    return [dict(r) for r in rows]
 
 # ── Pydantic Models ──────────────────────────────────────────────────────────
+class ProjectIn(BaseModel):
+    name: str
+    description: Optional[str] = None
+    address: Optional[str] = None
 
-class PagoBase(BaseModel):
+class UnitIn(BaseModel):
+    unit_number: str
+    unit_type: Optional[str] = "DEPTO"
+    purpose: Optional[str] = "RENTA"
+    floor: Optional[int] = None
+    area_sqm: Optional[float] = None
+    rent_price: Optional[float] = None
+    sale_price: Optional[float] = None
+    is_available: Optional[bool] = True
+    notes: Optional[str] = None
+
+class ContractIn(BaseModel):
+    tenant_name: str
+    tenant_email: Optional[str] = None
+    tenant_phone: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    monthly_rent: Optional[float] = None
+    deposit: Optional[float] = None
+    payment_day: Optional[int] = 1
+    status: Optional[str] = "ACTIVO"
+    notes: Optional[str] = None
+
+class PagoIn(BaseModel):
     fecha: Optional[str] = None
     ubicacion: Optional[str] = None
     desarrollo: Optional[str] = None
@@ -31,186 +184,334 @@ class PagoBase(BaseModel):
     monto: float = 0.0
     forma_de_pago: Optional[str] = None
     semana_fiscal: Optional[int] = None
+    project_id: Optional[int] = None
+    month: Optional[int] = None
+    year: Optional[int] = None
 
-
-class PagoCreate(PagoBase):
-    pass
-
-
-class Pago(PagoBase):
-    consecutivo: int
-
-    class Config:
-        from_attributes = True
-
-
-# ── Helpers ──────────────────────────────────────────────────────────────────
-
-def _str(val) -> Optional[str]:
-    if val is None or (isinstance(val, float) and pd.isna(val)):
-        return None
-    return str(val).strip()
-
-
-def _float(val) -> float:
-    try:
-        return float(val)
-    except (TypeError, ValueError):
-        return 0.0
-
-
-def load_excel() -> dict:
-    df = pd.read_excel(EXCEL_FILE, header=None)
-
-    def _date(val):
-        if isinstance(val, datetime):
-            return val.strftime("%Y-%m-%d")
-        return _str(val)
-
-    periodo       = _date(df.iloc[1, 2])
-    desarrollo    = _str(df.iloc[2, 2])
-    fecha_reporte = _date(df.iloc[3, 2])
-
-    total_efectivo       = _float(df.iloc[6, 2])
-    total_transferencias = _float(df.iloc[7, 2])
-    gran_total           = _float(df.iloc[8, 2])
-    pago_servicios       = _float(df.iloc[6, 5])
-    pago_renta           = _float(df.iloc[7, 5])
-
-    pagos = []
-    for _, row in df.iloc[11:].iterrows():
-        raw_id = row[0]
-        if raw_id is None or (isinstance(raw_id, float) and pd.isna(raw_id)):
-            continue
-        try:
-            consecutivo = int(raw_id)
-        except (ValueError, TypeError):
-            continue
-
-        pagos.append({
-            "consecutivo": consecutivo,
-            "fecha": _date(row[1]),
-            "ubicacion": _str(row[2]),
-            "desarrollo": _str(row[3]),
-            "mes_correspondiente": _str(row[4]),
-            "cliente": _str(row[5]),
-            "concepto": _str(row[6]),
-            "monto": _float(row[7]),
-            "forma_de_pago": _str(row[8]),
-            "semana_fiscal": int(row[9]) if pd.notna(row[9]) else None,
-        })
-
-    return {
-        "header": {
-            "periodo": periodo,
-            "desarrollo": desarrollo,
-            "fecha_reporte": fecha_reporte,
-        },
-        "resumen": {
-            "total_efectivo": total_efectivo,
-            "total_transferencias": total_transferencias,
-            "gran_total": gran_total,
-            "pago_servicios": pago_servicios,
-            "pago_renta": pago_renta,
-        },
-        "pagos": pagos,
-    }
-
-
-store = load_excel()
-
-
-def _recalc_resumen():
-    efectivo = sum(
-        p["monto"] for p in store["pagos"]
-        if p.get("forma_de_pago") and p["forma_de_pago"].upper() == "EFECTIVO"
-    )
-    transferencias = sum(
-        p["monto"] for p in store["pagos"]
-        if p.get("forma_de_pago") and p["forma_de_pago"].upper() != "EFECTIVO"
-    )
-    gran_total = efectivo + transferencias
-    pago_servicios = sum(
-        p["monto"] for p in store["pagos"]
-        if p.get("concepto") and any(
-            kw in p["concepto"].upper() for kw in ("AGUA", "SERVICIO", "LUZ", "GAS")
-        )
-    )
-    pago_renta = gran_total - pago_servicios
-    store["resumen"].update({
-        "total_efectivo": efectivo,
-        "total_transferencias": transferencias,
-        "gran_total": gran_total,
-        "pago_servicios": pago_servicios,
-        "pago_renta": pago_renta,
-    })
-
-
-# ── Routes ───────────────────────────────────────────────────────────────────
-
+# ── Routes: Root ─────────────────────────────────────────────────────────────
 @app.get("/")
-async def root():
-    return {"message": "Estado de Cuenta API — running"}
+def root():
+    return {"message": "Estado de Cuenta API v2 — running"}
 
-
+# ── Routes: Estado de Cuenta (summary from DB) ───────────────────────────────
 @app.get("/api/estado-cuenta")
-async def get_estado_cuenta():
-    return {"header": store["header"], "resumen": store["resumen"]}
+def get_estado_cuenta(month: Optional[int] = None, year: Optional[int] = None,
+                      project_id: Optional[int] = None):
+    conn = get_db()
+    where, params = [], []
+    if month:    where.append("month=?");      params.append(month)
+    if year:     where.append("year=?");       params.append(year)
+    if project_id: where.append("project_id=?"); params.append(project_id)
+    clause = ("WHERE " + " AND ".join(where)) if where else ""
 
+    rows = conn.execute(f"SELECT * FROM pagos {clause}", params).fetchall()
+    pagos = rows_to_list(rows)
 
-@app.get("/api/pagos", response_model=list[Pago])
-async def get_pagos(
-    forma_pago: Optional[str] = None,
-    semana_fiscal: Optional[int] = None,
-    search: Optional[str] = None,
-):
-    pagos = store["pagos"]
-    if forma_pago:
-        pagos = [p for p in pagos if p.get("forma_de_pago") and forma_pago.lower() in p["forma_de_pago"].lower()]
-    if semana_fiscal is not None:
-        pagos = [p for p in pagos if p.get("semana_fiscal") == semana_fiscal]
+    efectivo = sum(p["monto"] for p in pagos if p.get("forma_de_pago","").upper() == "EFECTIVO")
+    transf   = sum(p["monto"] for p in pagos if p.get("forma_de_pago","").upper() != "EFECTIVO")
+    servicios= sum(p["monto"] for p in pagos if p.get("concepto") and
+                   any(k in p["concepto"].upper() for k in ("AGUA","SERVICIO","LUZ","GAS")))
+
+    # Read header info from Excel if available
+    header = {"periodo": f"{year or 2026}-{month or 3:02d}-01",
+              "desarrollo": "Intercity / Condesa 1", "fecha_reporte": datetime.now().strftime("%Y-%m-%d")}
+    if EXCEL_FILE.exists() and not month and not project_id:
+        try:
+            df = pd.read_excel(EXCEL_FILE, header=None)
+            def _d(v): return v.strftime("%Y-%m-%d") if isinstance(v, datetime) else str(v)
+            header = {"periodo": _d(df.iloc[1,2]), "desarrollo": str(df.iloc[2,2]),
+                      "fecha_reporte": _d(df.iloc[3,2])}
+        except: pass
+
+    conn.close()
+    return {"header": header,
+            "resumen": {"total_efectivo": efectivo, "total_transferencias": transf,
+                        "gran_total": efectivo + transf, "pago_servicios": servicios,
+                        "pago_renta": (efectivo + transf) - servicios}}
+
+# ── Routes: Pagos ─────────────────────────────────────────────────────────────
+@app.get("/api/pagos")
+def get_pagos(forma_pago: Optional[str]=None, semana_fiscal: Optional[int]=None,
+              search: Optional[str]=None, project_id: Optional[int]=None,
+              month: Optional[int]=None, year: Optional[int]=None):
+    conn = get_db()
+    where, params = [], []
+    if forma_pago:   where.append("UPPER(forma_de_pago) LIKE ?"); params.append(f"%{forma_pago.upper()}%")
+    if semana_fiscal: where.append("semana_fiscal=?");             params.append(semana_fiscal)
+    if project_id:   where.append("project_id=?");                params.append(project_id)
+    if month:        where.append("month=?");                     params.append(month)
+    if year:         where.append("year=?");                      params.append(year)
     if search:
-        s = search.lower()
-        pagos = [p for p in pagos if any(
-            p.get(f) and s in str(p[f]).lower()
-            for f in ("cliente", "concepto", "ubicacion", "forma_de_pago")
-        )]
-    return pagos
+        s = f"%{search.upper()}%"
+        where.append("(UPPER(cliente) LIKE ? OR UPPER(concepto) LIKE ? OR UPPER(ubicacion) LIKE ?)")
+        params += [s, s, s]
+    clause = ("WHERE " + " AND ".join(where)) if where else ""
+    rows = conn.execute(f"SELECT * FROM pagos {clause} ORDER BY consecutivo", params).fetchall()
+    conn.close()
+    return rows_to_list(rows)
 
+@app.get("/api/pagos/{consecutivo}")
+def get_pago(consecutivo: int):
+    conn = get_db()
+    row = conn.execute("SELECT * FROM pagos WHERE consecutivo=?", (consecutivo,)).fetchone()
+    conn.close()
+    if not row: raise HTTPException(404, "Pago no encontrado")
+    return row_to_dict(row)
 
-@app.get("/api/pagos/{consecutivo}", response_model=Pago)
-async def get_pago(consecutivo: int):
-    for p in store["pagos"]:
-        if p["consecutivo"] == consecutivo:
-            return p
-    raise HTTPException(status_code=404, detail="Pago no encontrado")
+@app.post("/api/pagos", status_code=201)
+def create_pago(pago: PagoIn):
+    conn = get_db()
+    max_id = conn.execute("SELECT MAX(consecutivo) FROM pagos").fetchone()[0] or 0
+    new_id = max_id + 1
+    conn.execute("""INSERT INTO pagos (consecutivo,fecha,ubicacion,desarrollo,mes_correspondiente,
+        cliente,concepto,monto,forma_de_pago,semana_fiscal,project_id,month,year)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (new_id, pago.fecha, pago.ubicacion, pago.desarrollo, pago.mes_correspondiente,
+         pago.cliente, pago.concepto, pago.monto, pago.forma_de_pago, pago.semana_fiscal,
+         pago.project_id, pago.month, pago.year))
+    conn.commit()
+    row = conn.execute("SELECT * FROM pagos WHERE consecutivo=?", (new_id,)).fetchone()
+    conn.close()
+    return row_to_dict(row)
 
-
-@app.post("/api/pagos", response_model=Pago, status_code=201)
-async def create_pago(pago: PagoCreate):
-    new_id = (max(p["consecutivo"] for p in store["pagos"]) + 1) if store["pagos"] else 1
-    new_pago = {"consecutivo": new_id, **pago.model_dump()}
-    store["pagos"].append(new_pago)
-    _recalc_resumen()
-    return new_pago
-
-
-@app.put("/api/pagos/{consecutivo}", response_model=Pago)
-async def update_pago(consecutivo: int, pago: PagoCreate):
-    for i, p in enumerate(store["pagos"]):
-        if p["consecutivo"] == consecutivo:
-            updated = {"consecutivo": consecutivo, **pago.model_dump()}
-            store["pagos"][i] = updated
-            _recalc_resumen()
-            return updated
-    raise HTTPException(status_code=404, detail="Pago no encontrado")
-
+@app.put("/api/pagos/{consecutivo}")
+def update_pago(consecutivo: int, pago: PagoIn):
+    conn = get_db()
+    conn.execute("""UPDATE pagos SET fecha=?,ubicacion=?,desarrollo=?,mes_correspondiente=?,
+        cliente=?,concepto=?,monto=?,forma_de_pago=?,semana_fiscal=?,project_id=?,month=?,year=?
+        WHERE consecutivo=?""",
+        (pago.fecha, pago.ubicacion, pago.desarrollo, pago.mes_correspondiente,
+         pago.cliente, pago.concepto, pago.monto, pago.forma_de_pago, pago.semana_fiscal,
+         pago.project_id, pago.month, pago.year, consecutivo))
+    conn.commit()
+    row = conn.execute("SELECT * FROM pagos WHERE consecutivo=?", (consecutivo,)).fetchone()
+    conn.close()
+    if not row: raise HTTPException(404, "Pago no encontrado")
+    return row_to_dict(row)
 
 @app.delete("/api/pagos/{consecutivo}")
-async def delete_pago(consecutivo: int):
-    for i, p in enumerate(store["pagos"]):
-        if p["consecutivo"] == consecutivo:
-            store["pagos"].pop(i)
-            _recalc_resumen()
-            return {"message": "Pago eliminado", "consecutivo": consecutivo}
-    raise HTTPException(status_code=404, detail="Pago no encontrado")
+def delete_pago(consecutivo: int):
+    conn = get_db()
+    conn.execute("DELETE FROM pagos WHERE consecutivo=?", (consecutivo,))
+    conn.commit(); conn.close()
+    return {"message": "Pago eliminado", "consecutivo": consecutivo}
+
+# ── Routes: Projects ──────────────────────────────────────────────────────────
+@app.get("/api/projects")
+def get_projects():
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT p.*, COUNT(u.id) as unit_count,
+               SUM(CASE WHEN u.is_available=1 THEN 1 ELSE 0 END) as available_units
+        FROM projects p LEFT JOIN units u ON u.project_id=p.id
+        GROUP BY p.id ORDER BY p.name""").fetchall()
+    conn.close()
+    return rows_to_list(rows)
+
+@app.get("/api/projects/{pid}")
+def get_project(pid: int):
+    conn = get_db()
+    row = conn.execute("SELECT * FROM projects WHERE id=?", (pid,)).fetchone()
+    conn.close()
+    if not row: raise HTTPException(404, "Proyecto no encontrado")
+    return row_to_dict(row)
+
+@app.post("/api/projects", status_code=201)
+def create_project(p: ProjectIn):
+    conn = get_db()
+    cur = conn.execute("INSERT INTO projects (name,description,address) VALUES (?,?,?)",
+                       (p.name, p.description, p.address))
+    conn.commit()
+    row = conn.execute("SELECT * FROM projects WHERE id=?", (cur.lastrowid,)).fetchone()
+    conn.close()
+    return row_to_dict(row)
+
+@app.put("/api/projects/{pid}")
+def update_project(pid: int, p: ProjectIn):
+    conn = get_db()
+    conn.execute("UPDATE projects SET name=?,description=?,address=? WHERE id=?",
+                 (p.name, p.description, p.address, pid))
+    conn.commit()
+    row = conn.execute("SELECT * FROM projects WHERE id=?", (pid,)).fetchone()
+    conn.close()
+    if not row: raise HTTPException(404, "Proyecto no encontrado")
+    return row_to_dict(row)
+
+@app.delete("/api/projects/{pid}")
+def delete_project(pid: int):
+    conn = get_db()
+    conn.execute("DELETE FROM projects WHERE id=?", (pid,))
+    conn.commit(); conn.close()
+    return {"message": "Proyecto eliminado", "id": pid}
+
+# ── Routes: Units ─────────────────────────────────────────────────────────────
+@app.get("/api/projects/{pid}/units")
+def get_units(pid: int):
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT u.*, COUNT(c.id) as contract_count,
+               (SELECT c2.tenant_name FROM contracts c2 WHERE c2.unit_id=u.id AND c2.status='ACTIVO' LIMIT 1) as current_tenant
+        FROM units u LEFT JOIN contracts c ON c.unit_id=u.id
+        WHERE u.project_id=? GROUP BY u.id ORDER BY u.unit_number""", (pid,)).fetchall()
+    conn.close()
+    return rows_to_list(rows)
+
+@app.get("/api/units/{uid}")
+def get_unit(uid: int):
+    conn = get_db()
+    row = conn.execute("SELECT * FROM units WHERE id=?", (uid,)).fetchone()
+    conn.close()
+    if not row: raise HTTPException(404, "Unidad no encontrada")
+    return row_to_dict(row)
+
+@app.post("/api/projects/{pid}/units", status_code=201)
+def create_unit(pid: int, u: UnitIn):
+    conn = get_db()
+    cur = conn.execute("""INSERT INTO units (project_id,unit_number,unit_type,purpose,floor,
+        area_sqm,rent_price,sale_price,is_available,notes) VALUES (?,?,?,?,?,?,?,?,?,?)""",
+        (pid, u.unit_number, u.unit_type, u.purpose, u.floor, u.area_sqm,
+         u.rent_price, u.sale_price, 1 if u.is_available else 0, u.notes))
+    conn.commit()
+    row = conn.execute("SELECT * FROM units WHERE id=?", (cur.lastrowid,)).fetchone()
+    conn.close()
+    return row_to_dict(row)
+
+@app.put("/api/units/{uid}")
+def update_unit(uid: int, u: UnitIn):
+    conn = get_db()
+    conn.execute("""UPDATE units SET unit_number=?,unit_type=?,purpose=?,floor=?,
+        area_sqm=?,rent_price=?,sale_price=?,is_available=?,notes=? WHERE id=?""",
+        (u.unit_number, u.unit_type, u.purpose, u.floor, u.area_sqm,
+         u.rent_price, u.sale_price, 1 if u.is_available else 0, u.notes, uid))
+    conn.commit()
+    row = conn.execute("SELECT * FROM units WHERE id=?", (uid,)).fetchone()
+    conn.close()
+    if not row: raise HTTPException(404, "Unidad no encontrada")
+    return row_to_dict(row)
+
+@app.delete("/api/units/{uid}")
+def delete_unit(uid: int):
+    conn = get_db()
+    conn.execute("DELETE FROM units WHERE id=?", (uid,))
+    conn.commit(); conn.close()
+    return {"message": "Unidad eliminada", "id": uid}
+
+# ── Routes: Contracts ─────────────────────────────────────────────────────────
+@app.get("/api/units/{uid}/contracts")
+def get_contracts(uid: int):
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM contracts WHERE unit_id=? ORDER BY created_at DESC", (uid,)).fetchall()
+    conn.close()
+    return rows_to_list(rows)
+
+@app.get("/api/contracts/{cid}")
+def get_contract(cid: int):
+    conn = get_db()
+    row = conn.execute("SELECT * FROM contracts WHERE id=?", (cid,)).fetchone()
+    conn.close()
+    if not row: raise HTTPException(404, "Contrato no encontrado")
+    return row_to_dict(row)
+
+@app.post("/api/units/{uid}/contracts", status_code=201)
+def create_contract(uid: int, c: ContractIn):
+    conn = get_db()
+    cur = conn.execute("""INSERT INTO contracts (unit_id,tenant_name,tenant_email,tenant_phone,
+        start_date,end_date,monthly_rent,deposit,payment_day,status,notes)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+        (uid, c.tenant_name, c.tenant_email, c.tenant_phone, c.start_date, c.end_date,
+         c.monthly_rent, c.deposit, c.payment_day, c.status, c.notes))
+    # Mark unit as unavailable if contract is active
+    if c.status == "ACTIVO":
+        conn.execute("UPDATE units SET is_available=0 WHERE id=?", (uid,))
+    conn.commit()
+    row = conn.execute("SELECT * FROM contracts WHERE id=?", (cur.lastrowid,)).fetchone()
+    conn.close()
+    return row_to_dict(row)
+
+@app.put("/api/contracts/{cid}")
+def update_contract(cid: int, c: ContractIn):
+    conn = get_db()
+    old = conn.execute("SELECT unit_id FROM contracts WHERE id=?", (cid,)).fetchone()
+    conn.execute("""UPDATE contracts SET tenant_name=?,tenant_email=?,tenant_phone=?,
+        start_date=?,end_date=?,monthly_rent=?,deposit=?,payment_day=?,status=?,notes=?
+        WHERE id=?""",
+        (c.tenant_name, c.tenant_email, c.tenant_phone, c.start_date, c.end_date,
+         c.monthly_rent, c.deposit, c.payment_day, c.status, c.notes, cid))
+    if old:
+        uid = old["unit_id"]
+        active = conn.execute("SELECT COUNT(*) FROM contracts WHERE unit_id=? AND status='ACTIVO'", (uid,)).fetchone()[0]
+        conn.execute("UPDATE units SET is_available=? WHERE id=?", (0 if active else 1, uid))
+    conn.commit()
+    row = conn.execute("SELECT * FROM contracts WHERE id=?", (cid,)).fetchone()
+    conn.close()
+    return row_to_dict(row)
+
+@app.delete("/api/contracts/{cid}")
+def delete_contract(cid: int):
+    conn = get_db()
+    row = conn.execute("SELECT unit_id FROM contracts WHERE id=?", (cid,)).fetchone()
+    conn.execute("DELETE FROM contracts WHERE id=?", (cid,))
+    if row:
+        uid = row["unit_id"]
+        active = conn.execute("SELECT COUNT(*) FROM contracts WHERE unit_id=? AND status='ACTIVO'", (uid,)).fetchone()[0]
+        conn.execute("UPDATE units SET is_available=? WHERE id=?", (1 if not active else 0, uid))
+    conn.commit(); conn.close()
+    return {"message": "Contrato eliminado", "id": cid}
+
+# ── Routes: Documents ─────────────────────────────────────────────────────────
+@app.get("/api/documents")
+def get_documents(related_type: Optional[str]=None, related_id: Optional[int]=None):
+    conn = get_db()
+    where, params = [], []
+    if related_type: where.append("related_type=?"); params.append(related_type)
+    if related_id:   where.append("related_id=?");   params.append(related_id)
+    clause = ("WHERE " + " AND ".join(where)) if where else ""
+    rows = conn.execute(f"SELECT * FROM documents {clause} ORDER BY uploaded_at DESC", params).fetchall()
+    conn.close()
+    return rows_to_list(rows)
+
+@app.post("/api/documents/upload", status_code=201)
+async def upload_document(
+    related_type: str = Form(...),
+    related_id: int = Form(...),
+    name: str = Form(...),
+    document_type: str = Form("OTRO"),
+    file: UploadFile = File(...),
+):
+    ext = Path(file.filename).suffix
+    unique_name = f"{uuid.uuid4().hex}{ext}"
+    dest = UPLOADS / unique_name
+    content = await file.read()
+    dest.write_bytes(content)
+    conn = get_db()
+    cur = conn.execute("""INSERT INTO documents (related_type,related_id,name,document_type,
+        file_name,file_size,mime_type) VALUES (?,?,?,?,?,?,?)""",
+        (related_type, related_id, name, document_type, unique_name,
+         len(content), file.content_type))
+    conn.commit()
+    row = conn.execute("SELECT * FROM documents WHERE id=?", (cur.lastrowid,)).fetchone()
+    conn.close()
+    return row_to_dict(row)
+
+@app.get("/api/documents/{did}/download")
+def download_document(did: int):
+    conn = get_db()
+    row = conn.execute("SELECT * FROM documents WHERE id=?", (did,)).fetchone()
+    conn.close()
+    if not row: raise HTTPException(404, "Documento no encontrado")
+    path = UPLOADS / row["file_name"]
+    if not path.exists(): raise HTTPException(404, "Archivo no encontrado")
+    return FileResponse(path, media_type=row["mime_type"] or "application/octet-stream",
+                        filename=row["name"] + Path(row["file_name"]).suffix)
+
+@app.delete("/api/documents/{did}")
+def delete_document(did: int):
+    conn = get_db()
+    row = conn.execute("SELECT * FROM documents WHERE id=?", (did,)).fetchone()
+    if row:
+        path = UPLOADS / row["file_name"]
+        if path.exists(): path.unlink()
+        conn.execute("DELETE FROM documents WHERE id=?", (did,))
+        conn.commit()
+    conn.close()
+    return {"message": "Documento eliminado", "id": did}

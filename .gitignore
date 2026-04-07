@@ -14,13 +14,15 @@ build/
 venv/
 ENV/
 
-# ── Data / Sensitive files ────────────────────────────────
+# Data / Sensitive files
 *.xlsx
 *.xls
 *.csv
 *.env
 .env*
 *.secret
+app.db
+uploads/
 
 # ── Node / Frontend ───────────────────────────────────────
 frontend/node_modules/
@@ -40,4 +42,5 @@ Thumbs.db
 # ── Logs ─────────────────────────────────────────────────
 *.log
 nohup.out
+
 
