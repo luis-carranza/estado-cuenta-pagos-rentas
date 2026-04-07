@@ -318,3 +318,78 @@ body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f4f8; color: #
 .credit-val { color: #2e7d32; }
 .debit-val  { color: #c62828; }
 
+/* ── Inline editing (BankStatementDetailPage) ── */
+.ie-table { table-layout: auto; }
+
+/* editable cell hover cue */
+.ie-cell {
+  cursor: pointer;
+  transition: background 0.12s;
+  padding: 7px 10px !important;
+}
+.ie-cell:hover { background: #eef3fb !important; }
+
+/* row being edited */
+.ie-editing-row td { background: #fffde7 !important; }
+
+/* new row appended */
+.ie-new-row td { background: #f1f8ff !important; }
+
+/* row idle — subtle hover */
+.ie-row:hover td { background: #f5f8fd !important; }
+
+/* inline input fields */
+.ie-input {
+  width: 100%;
+  padding: 4px 7px;
+  border: 1px solid #b0c4de;
+  border-radius: 5px;
+  font-size: 13px;
+  background: #fff;
+  outline: none;
+  box-sizing: border-box;
+  font-family: inherit;
+  color: #1a1a2e;
+}
+.ie-input:focus { border-color: #1a3a6b; box-shadow: 0 0 0 2px rgba(26,58,107,.12); }
+
+/* inline select fields */
+.ie-select {
+  padding: 4px 7px;
+  border: 1px solid #b0c4de;
+  border-radius: 5px;
+  font-size: 13px;
+  background: #fff;
+  outline: none;
+  font-family: inherit;
+  color: #1a1a2e;
+}
+.ie-select:focus { border-color: #1a3a6b; box-shadow: 0 0 0 2px rgba(26,58,107,.12); }
+
+/* empty placeholder text */
+.ie-empty { color: #bbb; font-style: italic; font-size: 12px; }
+
+/* hint bar above the table */
+.ie-hint {
+  font-size: 12px;
+  color: #555;
+  background: #fffde7;
+  border: 1px solid #ffe082;
+  border-radius: 7px;
+  padding: 8px 14px;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ie-hint kbd {
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 11px;
+  font-family: monospace;
+  color: #333;
+  margin: 0 2px;
+}
+
