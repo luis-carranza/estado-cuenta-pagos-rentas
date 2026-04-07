@@ -129,6 +129,25 @@ body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f4f8; color: #
 .stat-pill.total { background: #e3f2fd; color: #1565c0; }
 .stat-pill.avail { background: #e8f5e9; color: #2e7d32; }
 
+/* ── Units toolbar ── */
+.units-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.units-search { padding: 7px 12px; border: 1px solid #d0d9e8; border-radius: 6px; font-size: 13px; outline: none; min-width: 200px; background: #fff; }
+.units-search:focus { border-color: #1a3a6b; }
+
+/* ── View toggle ── */
+.view-toggle { display: flex; border: 1px solid #c0cfe0; border-radius: 6px; overflow: hidden; }
+.view-btn { background: #fff; border: none; padding: 6px 10px; cursor: pointer; color: #666; display: flex; align-items: center; transition: all 0.15s; }
+.view-btn:hover { background: #e8f0fb; color: #1a3a6b; }
+.view-btn.active { background: #1a3a6b; color: #fff; }
+
+/* ── Stats bar ── */
+.units-stats-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+.ustat { font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 20px; }
+.ustat.total    { background: #e3f2fd; color: #1565c0; }
+.ustat.occupied { background: #fce4ec; color: #c62828; }
+.ustat.available{ background: #e8f5e9; color: #2e7d32; }
+.ustat.filtered { background: #fff8e1; color: #e65100; }
+
 /* ── Units grid ── */
 .units-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
 .unit-card { background: #fff; border-radius: 10px; padding: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); border-left: 4px solid #e0e0e0; }
@@ -149,6 +168,17 @@ body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f4f8; color: #
 .availability-badge.taken { background: #fce4ec; color: #c62828; }
 .unit-notes { font-size: 11px; color: #777; margin: 4px 0; font-style: italic; }
 .unit-actions { display: flex; gap: 6px; margin-top: 10px; align-items: center; }
+
+/* ── Units list table ── */
+.units-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.units-table thead tr { background: #1a3a6b; color: #fff; }
+.units-table th { padding: 10px 10px; text-align: left; font-weight: 700; font-size: 11px; letter-spacing: 0.3px; white-space: nowrap; }
+.units-table td { padding: 9px 10px; border-bottom: 1px solid #eef0f5; vertical-align: middle; }
+.units-table tbody tr:hover { background: #e8f0fb; }
+.ul-unit-num { font-weight: 700; color: #1a3a6b; white-space: nowrap; }
+.ul-tenant   { font-weight: 500; max-width: 200px; }
+.ul-notes    { font-size: 11px; color: #777; font-style: italic; max-width: 160px; }
+.ul-empty    { color: #bbb; }
 
 /* ── Contracts ── */
 .contracts-list { display: flex; flex-direction: column; gap: 12px; }
