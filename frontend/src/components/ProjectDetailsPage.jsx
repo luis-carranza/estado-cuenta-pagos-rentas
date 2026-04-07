@@ -1,10 +1,15 @@
 import { useState, useEffect } from 'react';
 import {
   ChevronLeft, Building2, DollarSign, Home, MapPin, FolderOpen,
-  TrendingUp, Users, Percent, ArrowUpRight, FileText, Download, Trash2
+  TrendingUp, Users, Percent, ArrowUpRight, FileText, Download, Trash2,
+  Landmark, ChevronDown, ChevronRight, Link2, CheckCircle2, Circle,
+  TrendingDown, RefreshCw
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import { getProjectBudget, getDocuments, deleteDocument, uploadDocument } from '../services/api';
+import {
+  getProjectBudget, getDocuments, deleteDocument, uploadDocument,
+  getProjectBankTransactions,
+} from '../services/api';
 import UnitsPage from './UnitsPage';
 
 const fmt  = n => n != null ? new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN'}).format(n) : '—';
@@ -118,10 +123,234 @@ function ProjectDocsTab({ projectId }) {
   );
 }
 
+// ── Bancos tab (bank statements + lines per project) ─────────────────────────
+const MONTHS_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
+                   'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+const fmtCur = v => v != null
+  ? new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN'}).format(v)
+  : '—';
+
+function StatementBlock({ statement }) {
+  const [open, setOpen] = useState(true);
+  const periodStr = statement.period_month
+    ? `${MONTHS_ES[statement.period_month-1]} ${statement.period_year}`
+    : (statement.period_year || '—');
+  const credits = statement.lines.filter(l=>l.transaction_type==='CREDITO').reduce((s,l)=>s+l.amount,0);
+  const debits  = statement.lines.filter(l=>l.transaction_type==='DEBITO').reduce((s,l)=>s+l.amount,0);
+  const matched = statement.lines.filter(l=>l.is_matched).length;
+  const total   = statement.lines.length;
+  const pct     = total > 0 ? Math.round(matched/total*100) : 0;
+
+  return (
+    <div className="bs-block card mb-6">
+      {/* ── Statement header (clickable to collapse) ── */}
+      <div className="bs-block-header" onClick={()=>setOpen(o=>!o)}>
+        <div className="bs-block-left">
+          <div className="bs-bank-icon"><Landmark size={18}/></div>
+          <div>
+            <div className="bs-title">
+              {statement.bank_name || 'Banco'}
+              {statement.account_alias && <span className="bs-alias"> — {statement.account_alias}</span>}
+            </div>
+            <div className="bs-meta">
+              {statement.account_number && <span className="bs-chip">•••• {statement.account_number}</span>}
+              <span className="bs-chip period">{periodStr}</span>
+            </div>
+          </div>
+        </div>
+        <div className="bs-block-stats">
+          <div className="bs-stat-item">
+            <TrendingUp size={13} color="#2e7d32"/>
+            <span className="bs-stat-num credit">{fmtCur(credits)}</span>
+            <span className="bs-stat-lbl">créditos</span>
+          </div>
+          <div className="bs-stat-item">
+            <TrendingDown size={13} color="#c62828"/>
+            <span className="bs-stat-num debit">{fmtCur(debits)}</span>
+            <span className="bs-stat-lbl">débitos</span>
+          </div>
+          <div className="bs-stat-item">
+            <Link2 size={13} color="#1565c0"/>
+            <span className="bs-stat-num">{matched}/{total}</span>
+            <span className="bs-stat-lbl">conciliadas ({pct}%)</span>
+          </div>
+        </div>
+        <div className="bs-block-toggle">
+          {open ? <ChevronDown size={16}/> : <ChevronRight size={16}/>}
+        </div>
+      </div>
+
+      {/* ── Lines table ── */}
+      {open && (
+        <div className="table-wrapper" style={{marginTop:0}}>
+          {statement.lines.length === 0 ? (
+            <div className="empty-state-sm">Sin líneas en este estado.</div>
+          ) : (
+            <table className="pagos-table" style={{fontSize:12}}>
+              <thead>
+                <tr>
+                  <th style={{width:24}}></th>
+                  <th style={{width:100}}>Fecha</th>
+                  <th>Descripción</th>
+                  <th style={{width:110}}>Referencia</th>
+                  <th style={{textAlign:'right',width:110}}>Monto</th>
+                  <th style={{width:80}}>Tipo</th>
+                  <th style={{width:150}}>Unidad asignada</th>
+                </tr>
+              </thead>
+              <tbody>
+                {statement.lines.map((l, idx) => (
+                  <tr key={l.id} className={idx%2===0?'row-even':'row-odd'}>
+                    <td className="text-center">
+                      {l.is_matched
+                        ? <CheckCircle2 size={13} color="#43a047" title="Conciliada"/>
+                        : <Circle size={13} color="#ccc" title="Sin conciliar"/>}
+                    </td>
+                    <td style={{whiteSpace:'nowrap'}}>{l.line_date||'—'}</td>
+                    <td>
+                      <div style={{fontWeight:500,lineHeight:1.3}}>{l.description||'—'}</div>
+                      {l.notes && <div style={{fontSize:10,color:'#999',fontStyle:'italic'}}>{l.notes}</div>}
+                    </td>
+                    <td style={{fontSize:11,color:'#777'}}>{l.reference||'—'}</td>
+                    <td style={{textAlign:'right'}}>
+                      <span className={l.transaction_type==='CREDITO'?'credit-val':'debit-val'} style={{fontWeight:700}}>
+                        {l.transaction_type==='DEBITO'?'-':'+'}{fmtCur(l.amount)}
+                      </span>
+                    </td>
+                    <td>
+                      <span className={`badge ${l.transaction_type==='CREDITO'?'badge-activo':'badge-cancelado'}`}
+                        style={{fontSize:10}}>
+                        {l.transaction_type==='CREDITO'?'CRÉDITO':'DÉBITO'}
+                      </span>
+                    </td>
+                    <td>
+                      {l.matched_unit
+                        ? <span className="badge badge-activo" style={{fontSize:10}}>
+                            {l.matched_unit}{l.matched_tenant?` · ${l.matched_tenant}`:''}
+                          </span>
+                        : <span style={{color:'#ccc',fontSize:11}}>—</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="total-footer">
+                  <td colSpan={4} className="footer-label">{total} movimientos</td>
+                  <td className="footer-total" style={{textAlign:'right'}}>
+                    <div className="credit-val">{fmtCur(credits)}</div>
+                    <div className="debit-val" style={{fontSize:11}}>{fmtCur(debits)}</div>
+                  </td>
+                  <td colSpan={2}/>
+                </tr>
+              </tfoot>
+            </table>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProjectBancosTab({ projectId }) {
+  const [statements, setStatements] = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [filterType, setFilterType] = useState('');
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const data = await getProjectBankTransactions(projectId);
+      setStatements(data);
+    } catch { toast.error('Error cargando estados bancarios'); }
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => { load(); }, [projectId]); // eslint-disable-line
+
+  // Overall KPIs across all statements
+  const allLines   = statements.flatMap(s => s.lines);
+  const totCredits = allLines.filter(l=>l.transaction_type==='CREDITO').reduce((s,l)=>s+l.amount,0);
+  const totDebits  = allLines.filter(l=>l.transaction_type==='DEBITO').reduce((s,l)=>s+l.amount,0);
+  const totMatched = allLines.filter(l=>l.is_matched).length;
+
+  // Filter visible lines inside each statement
+  const filtered = statements.map(s => ({
+    ...s,
+    lines: filterType ? s.lines.filter(l=>l.transaction_type===filterType) : s.lines,
+  }));
+
+  if (loading) return <div className="loading-overlay"><div className="spinner"/><span>Cargando…</span></div>;
+
+  if (statements.length === 0) return (
+    <div className="empty-state">
+      <Landmark size={40} style={{margin:'0 auto 12px',color:'#c0cfe0'}}/>
+      <p>No hay estados de banco asociados a este proyecto.</p>
+      <p style={{fontSize:12,color:'#888',marginTop:6}}>Ve a la sección Bancos para crear uno y asignarlo a este proyecto.</p>
+    </div>
+  );
+
+  return (
+    <div>
+      {/* KPIs */}
+      <div className="kpi-grid mb-6">
+        <div className="kpi-card">
+          <div className="kpi-icon" style={{background:'#e8f5e9'}}><TrendingUp size={20} color="#2e7d32"/></div>
+          <div className="kpi-body">
+            <div className="kpi-value" style={{color:'#2e7d32'}}>{fmtCur(totCredits)}</div>
+            <div className="kpi-label">Total créditos</div>
+          </div>
+        </div>
+        <div className="kpi-card">
+          <div className="kpi-icon" style={{background:'#fce4ec'}}><TrendingDown size={20} color="#c62828"/></div>
+          <div className="kpi-body">
+            <div className="kpi-value" style={{color:'#c62828'}}>{fmtCur(totDebits)}</div>
+            <div className="kpi-label">Total débitos</div>
+          </div>
+        </div>
+        <div className="kpi-card">
+          <div className="kpi-icon" style={{background:'#e3f2fd'}}><Landmark size={20} color="#1565c0"/></div>
+          <div className="kpi-body">
+            <div className="kpi-value" style={{color:'#1565c0'}}>{statements.length}</div>
+            <div className="kpi-label">Estados de banco</div>
+          </div>
+        </div>
+        <div className="kpi-card">
+          <div className="kpi-icon" style={{background:'#f3e8ff'}}><Link2 size={20} color="#6a1b9a"/></div>
+          <div className="kpi-body">
+            <div className="kpi-value" style={{color:'#6a1b9a'}}>{totMatched}/{allLines.length}</div>
+            <div className="kpi-label">Líneas conciliadas</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Filter bar */}
+      <div className="card mb-6">
+        <div className="filters-bar">
+          <div className="filter-group">
+            <span>Tipo:</span>
+            <select value={filterType} onChange={e=>setFilterType(e.target.value)}>
+              <option value="">Todos</option>
+              <option value="CREDITO">Solo créditos</option>
+              <option value="DEBITO">Solo débitos</option>
+            </select>
+          </div>
+          <button className="btn-outline" onClick={load}><RefreshCw size={13}/> Recargar</button>
+          {filterType && <button className="btn-clear" onClick={()=>setFilterType('')}>Limpiar</button>}
+        </div>
+      </div>
+
+      {/* Statement blocks */}
+      {filtered.map(s => <StatementBlock key={s.id} statement={s}/>)}
+    </div>
+  );
+}
+
 // ── Main component ───────────────────────────────────────────────────────────
 const TABS = [
   { id: 'budget',    label: 'Presupuesto', icon: DollarSign },
   { id: 'units',     label: 'Unidades',    icon: Home        },
+  { id: 'bancos',    label: 'Banco$',      icon: Landmark    },
   { id: 'location',  label: 'Ubicación',   icon: MapPin      },
   { id: 'documents', label: 'Documentos',  icon: FolderOpen  },
 ];
@@ -307,6 +536,13 @@ export default function ProjectDetailsPage({ project, onBack, onEditProject }) {
           onSelectUnit={() => {}}
           hideBackButton
         />
+      )}
+
+      {/* ══════════════════════════════════════════════════════
+          TAB: BANCOS$
+         ══════════════════════════════════════════════════════ */}
+      {activeTab === 'bancos' && (
+        <ProjectBancosTab projectId={project.id}/>
       )}
 
       {/* ══════════════════════════════════════════════════════

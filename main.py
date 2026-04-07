@@ -870,5 +870,47 @@ def delete_statement_match(mid: int):
     conn.close()
     return {"message": "Coincidencia eliminada", "id": mid}
 
+# ── Routes: Project bank transactions (statements + lines in one call) ────────
+@app.get("/api/projects/{pid}/bank-transactions")
+def get_project_bank_transactions(pid: int):
+    """Return all bank statements for a project, each with its lines embedded."""
+    conn = get_db()
+    if not conn.execute("SELECT id FROM projects WHERE id=?", (pid,)).fetchone():
+        raise HTTPException(404, "Proyecto no encontrado")
+
+    statements = conn.execute("""
+        SELECT bs.*,
+               p.name as project_name,
+               COUNT(bsl.id) as line_count,
+               SUM(CASE WHEN bsl.is_matched=1 THEN 1 ELSE 0 END) as matched_count
+        FROM bank_statements bs
+        LEFT JOIN projects p ON p.id = bs.project_id
+        LEFT JOIN bank_statement_lines bsl ON bsl.statement_id = bs.id
+        WHERE bs.project_id = ?
+        GROUP BY bs.id
+        ORDER BY bs.period_year DESC, bs.period_month DESC
+    """, (pid,)).fetchall()
+
+    result = []
+    for s in statements:
+        sid = s["id"]
+        lines = conn.execute("""
+            SELECT bsl.*,
+                   (SELECT COUNT(*) FROM statement_matches sm WHERE sm.line_id=bsl.id) as match_count,
+                   (SELECT u.unit_number FROM statement_matches sm
+                    LEFT JOIN units u ON u.id=sm.unit_id
+                    WHERE sm.line_id=bsl.id LIMIT 1) as matched_unit,
+                   (SELECT c.tenant_name FROM statement_matches sm
+                    LEFT JOIN contracts c ON c.id=sm.contract_id
+                    WHERE sm.line_id=bsl.id LIMIT 1) as matched_tenant
+            FROM bank_statement_lines bsl
+            WHERE bsl.statement_id=?
+            ORDER BY bsl.line_date, bsl.id
+        """, (sid,)).fetchall()
+        result.append({**dict(s), "lines": rows_to_list(lines)})
+
+    conn.close()
+    return result
+
 # ── Routes: Root, Estado de Cuenta, Pagos, Projects, Units, Contracts, Documents ──
 

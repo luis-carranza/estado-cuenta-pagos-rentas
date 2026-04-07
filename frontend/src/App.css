@@ -393,3 +393,32 @@ body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f4f8; color: #
   margin: 0 2px;
 }
 
+/* ── Project Bancos$ tab — statement blocks ── */
+.bs-block { overflow: hidden; }
+.bs-block-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 18px;
+  cursor: pointer;
+  background: #f7f9fc;
+  border-bottom: 1px solid #e3e9f0;
+  user-select: none;
+  transition: background 0.12s;
+  flex-wrap: wrap;
+}
+.bs-block-header:hover { background: #eef3fb; }
+.bs-block-left { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 220px; }
+.bs-block-stats {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.bs-stat-item { display: flex; align-items: center; gap: 5px; font-size: 12px; }
+.bs-stat-num { font-weight: 700; }
+.bs-stat-num.credit { color: #2e7d32; }
+.bs-stat-num.debit  { color: #c62828; }
+.bs-stat-lbl { color: #777; }
+.bs-block-toggle { margin-left: auto; color: #888; flex-shrink: 0; }
+

@@ -46,3 +46,6 @@ export const getLineMatches        = (lid)     => api.get(`/api/bank-statement-l
 export const createLineMatch       = (lid,d)   => api.post(`/api/bank-statement-lines/${lid}/match`, d).then(r=>r.data);
 export const deleteStatementMatch  = (mid)     => api.delete(`/api/statement-matches/${mid}`).then(r=>r.data);
 
+// ── Project bank transactions (statements + lines in one call) ───────────────
+export const getProjectBankTransactions = (pid) => api.get(`/api/projects/${pid}/bank-transactions`).then(r=>r.data);
+
