@@ -10,14 +10,15 @@ const TABS = [
 ];
 
 export default function Navbar({ active, onChange }) {
-  // treat project-details as part of the projects section; banco-detail as bancos
+  // treat project-details as part of the projects section
+  // treat banco-detail as part of the bancos section
   const effectiveActive = active === 'project-details' ? 'projects'
                         : active === 'banco-detail'    ? 'bancos'
                         : active;
   return (
     <nav className="navbar">
       <div className="navbar-brand">
-        <Building2 size={22} /> RISKOS DIVISION RENTAS
+        <Building2 size={22} /> Estado de Cuenta
       </div>
       <div className="navbar-tabs">
         {TABS.map((tab) => {
