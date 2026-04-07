@@ -17,6 +17,11 @@ export const createUnit      = (pid,d)=> api.post(`/api/projects/${pid}/units`, 
 export const updateUnit      = (id,d) => api.put(`/api/units/${id}`, d).then(r=>r.data);
 export const deleteUnit      = (id)   => api.delete(`/api/units/${id}`).then(r=>r.data);
 
+export const getUnitServices    = (uid)    => api.get(`/api/units/${uid}/services`).then(r=>r.data);
+export const createUnitService  = (uid, d) => api.post(`/api/units/${uid}/services`, d).then(r=>r.data);
+export const updateUnitService  = (sid, d) => api.put(`/api/unit-services/${sid}`, d).then(r=>r.data);
+export const deleteUnitService  = (sid)    => api.delete(`/api/unit-services/${sid}`).then(r=>r.data);
+
 export const getContracts    = (uid)  => api.get(`/api/units/${uid}/contracts`).then(r=>r.data);
 export const createContract  = (uid,d)=> api.post(`/api/units/${uid}/contracts`, d).then(r=>r.data);
 export const updateContract  = (id,d) => api.put(`/api/contracts/${id}`, d).then(r=>r.data);

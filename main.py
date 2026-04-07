@@ -42,16 +42,25 @@ def init_db():
         created_at  TEXT DEFAULT (datetime('now'))
     );
     CREATE TABLE IF NOT EXISTS units (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id      INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        unit_number     TEXT NOT NULL,
+        unit_type       TEXT DEFAULT 'DEPTO',
+        purpose         TEXT DEFAULT 'RENTA',
+        floor           INTEGER,
+        area_sqm        REAL,
+        rent_price      REAL,
+        sale_price      REAL,
+        is_available    INTEGER DEFAULT 1,
+        current_tenant  TEXT,
+        notes           TEXT
+    );
+    CREATE TABLE IF NOT EXISTS unit_services (
         id           INTEGER PRIMARY KEY AUTOINCREMENT,
-        project_id   INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-        unit_number  TEXT NOT NULL,
-        unit_type    TEXT DEFAULT 'DEPTO',
-        purpose      TEXT DEFAULT 'RENTA',
-        floor        INTEGER,
-        area_sqm     REAL,
-        rent_price   REAL,
-        sale_price   REAL,
-        is_available INTEGER DEFAULT 1,
+        unit_id      INTEGER NOT NULL REFERENCES units(id) ON DELETE CASCADE,
+        service_name TEXT NOT NULL,
+        status       TEXT DEFAULT 'PENDIENTE',
+        amount       REAL,
         notes        TEXT
     );
     CREATE TABLE IF NOT EXISTS contracts (
@@ -101,6 +110,9 @@ def init_db():
     # Seed pagos from Excel if table is empty
     if conn.execute("SELECT COUNT(*) FROM pagos").fetchone()[0] == 0:
         _seed_from_excel(conn)
+    # Seed project + units if empty
+    if conn.execute("SELECT COUNT(*) FROM projects").fetchone()[0] == 0:
+        _seed_project_and_units(conn)
     conn.close()
 
 def _seed_from_excel(conn):
@@ -136,6 +148,65 @@ def _seed_from_excel(conn):
         print(f"Excel seed warning: {e}")
     conn.commit()
 
+UNITS_SEED = [
+    # (unit_number, unit_type, client_name, rent_price)
+    ("L-102B",      "LOCAL",  "MA GUADALUPE RAMOS AGUILAR",       12000.00),
+    ("L-100A",      "LOCAL",  "LUCERO OLVERA",                    28500.00),
+    ("L-105A",      "LOCAL",  "FRANCIS DOS SANTOS GARCIA",        25000.00),
+    ("L-108A",      "LOCAL",  "MARIO DOMINGO HERNANDEZ",          26250.00),
+    ("L-111A",      "LOCAL",  "LAURA YADIRA CALDERON",            26000.00),
+    ("DEPTO 437E",  "DEPTO",  "EVA HORTENSIA DAVILA PEREZ",        8500.00),
+    ("DEPTO 328D",  "DEPTO",  "ARMANDO GONZALEZ MARTINEZ",         9000.00),
+    ("DEPTO 430E",  "DEPTO",  "DAVID RENE GOZNALEZ ROJAS",         8500.00),
+    ("DEPTO 211A",  "DEPTO",  "SIDARTHA MONCADA SORIANO",         15000.00),
+    ("DEPTO 130E",  "DEPTO",  "JORGE MANUEL GARDUÑO RIVERA",       9500.00),
+    ("DEPTO 209A",  "DEPTO",  "MK GAON FOOD",                    15000.00),
+    ("DEPTO 208A",  "DEPTO",  "MONIKA IVONNE ZEPEDA",            15000.00),
+    ("DEPTO 429E",  "DEPTO",  "IVAN OMAR BERNAL ALCALA",         17850.00),
+    ("DEPTO 438E",  "DEPTO",  "FREDDY CABAÑAS HERNANDEZ",         8900.00),
+    ("DEPTO 327D",  "DEPTO",  "LISSETTE REYES GABRIEL",           9500.00),
+    ("DEPTO 406A",  "DEPTO",  "DIEGO MARTINEZ MORENO",           10500.00),
+    ("DEPTO 138E",  "DEPTO",  "MARIANA MEDINA ARAÑA",             9500.00),
+    ("DEPTO 239E",  "DEPTO",  "DIEGO OMAR CAREAGA GOMEZ",         8500.00),
+    ("DEPTO 203A",  "DEPTO",  "OSCAR ROSAS PANDURA",             12000.00),
+    ("DEPTO 409A",  "DEPTO",  "MA CONCEPCION ORTEGA",            13000.00),
+    ("DEPTO 200A",  "DEPTO",  "NORMA SILVIA LAGUNA CASSO",       14000.00),
+    ("LOCAL 102A",  "LOCAL",  "LUIS ANTONIO MARTINEZ",           12500.00),
+    ("LOCAL 112A",  "LOCAL",  "RAUL FLORENTINO",                 28087.00),
+    ("DEPTO 202A",  "DEPTO",  "J JESUS CASTAÑEDA RAMIREZ",       14000.00),
+    ("DEPTO 413A",  "DEPTO",  "ANEL NAVA FUENTES",               13650.00),
+    ("DEPTO 400A",  "DEPTO",  "OSCAR MANCADA SERVIN",            14150.00),
+    ("OXXO",        "COMERCIAL","OXXO",                           1898.55),
+    ("DEPTO 140E",  "DEPTO",  "JOSE LEONARDO VAZQUEZ",            9500.00),
+    ("DEPTO 402A",  "DEPTO",  "CARLOS A HERNANDEZ HERNANDEZ",    14000.00),
+    ("DEPTO 105E",  "DEPTO",  "INQUILINO 30",                     9000.00),
+    ("DEPTO 315D",  "DEPTO",  "INQUILINO 31",                     9500.00),
+    ("DEPTO 501A",  "DEPTO",  "INQUILINO 32",                    13000.00),
+]
+
+DEFAULT_SERVICES = ["AGUA", "LUZ", "BASURA"]
+
+def _seed_project_and_units(conn):
+    cur = conn.execute(
+        "INSERT INTO projects (name, description, address) VALUES (?,?,?)",
+        ("Intercity / Condesa 1", "Desarrollo residencial y comercial", "Ciudad de México")
+    )
+    pid = cur.lastrowid
+    for unit_number, unit_type, client, rent in UNITS_SEED:
+        uc = conn.execute(
+            """INSERT INTO units (project_id, unit_number, unit_type, purpose,
+               rent_price, is_available, current_tenant)
+               VALUES (?,?,?,'RENTA',?,0,?)""",
+            (pid, unit_number, unit_type, rent, client)
+        )
+        uid = uc.lastrowid
+        for svc in DEFAULT_SERVICES:
+            conn.execute(
+                "INSERT INTO unit_services (unit_id, service_name, status) VALUES (?,?,?)",
+                (uid, svc, "PENDIENTE")
+            )
+    conn.commit()
+
 init_db()
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -160,6 +231,13 @@ class UnitIn(BaseModel):
     rent_price: Optional[float] = None
     sale_price: Optional[float] = None
     is_available: Optional[bool] = True
+    current_tenant: Optional[str] = None
+    notes: Optional[str] = None
+
+class UnitServiceIn(BaseModel):
+    service_name: str
+    status: Optional[str] = "PENDIENTE"
+    amount: Optional[float] = None
     notes: Optional[str] = None
 
 class ContractIn(BaseModel):
@@ -349,12 +427,25 @@ def delete_project(pid: int):
 def get_units(pid: int):
     conn = get_db()
     rows = conn.execute("""
-        SELECT u.*, COUNT(c.id) as contract_count,
-               (SELECT c2.tenant_name FROM contracts c2 WHERE c2.unit_id=u.id AND c2.status='ACTIVO' LIMIT 1) as current_tenant
+        SELECT u.*,
+               COUNT(DISTINCT c.id) as contract_count,
+               COALESCE(
+                   (SELECT c2.tenant_name FROM contracts c2 WHERE c2.unit_id=u.id AND c2.status='ACTIVO' LIMIT 1),
+                   u.current_tenant
+               ) as display_tenant
         FROM units u LEFT JOIN contracts c ON c.unit_id=u.id
         WHERE u.project_id=? GROUP BY u.id ORDER BY u.unit_number""", (pid,)).fetchall()
+    units = rows_to_list(rows)
+    # Attach services to each unit
+    for unit in units:
+        svc_rows = conn.execute(
+            "SELECT * FROM unit_services WHERE unit_id=? ORDER BY service_name",
+            (unit["id"],)
+        ).fetchall()
+        unit["services"] = rows_to_list(svc_rows)
+        unit["current_tenant"] = unit.pop("display_tenant", unit.get("current_tenant"))
     conn.close()
-    return rows_to_list(rows)
+    return units
 
 @app.get("/api/units/{uid}")
 def get_unit(uid: int):
@@ -368,21 +459,29 @@ def get_unit(uid: int):
 def create_unit(pid: int, u: UnitIn):
     conn = get_db()
     cur = conn.execute("""INSERT INTO units (project_id,unit_number,unit_type,purpose,floor,
-        area_sqm,rent_price,sale_price,is_available,notes) VALUES (?,?,?,?,?,?,?,?,?,?)""",
+        area_sqm,rent_price,sale_price,is_available,current_tenant,notes) VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
         (pid, u.unit_number, u.unit_type, u.purpose, u.floor, u.area_sqm,
-         u.rent_price, u.sale_price, 1 if u.is_available else 0, u.notes))
+         u.rent_price, u.sale_price, 1 if u.is_available else 0, u.current_tenant, u.notes))
+    uid = cur.lastrowid
+    # Seed default services for new unit
+    for svc in DEFAULT_SERVICES:
+        conn.execute("INSERT INTO unit_services (unit_id, service_name, status) VALUES (?,?,?)",
+                     (uid, svc, "PENDIENTE"))
     conn.commit()
-    row = conn.execute("SELECT * FROM units WHERE id=?", (cur.lastrowid,)).fetchone()
+    row = conn.execute("SELECT * FROM units WHERE id=?", (uid,)).fetchone()
+    unit = row_to_dict(row)
+    svc_rows = conn.execute("SELECT * FROM unit_services WHERE unit_id=? ORDER BY service_name", (uid,)).fetchall()
+    unit["services"] = rows_to_list(svc_rows)
     conn.close()
-    return row_to_dict(row)
+    return unit
 
 @app.put("/api/units/{uid}")
 def update_unit(uid: int, u: UnitIn):
     conn = get_db()
     conn.execute("""UPDATE units SET unit_number=?,unit_type=?,purpose=?,floor=?,
-        area_sqm=?,rent_price=?,sale_price=?,is_available=?,notes=? WHERE id=?""",
+        area_sqm=?,rent_price=?,sale_price=?,is_available=?,current_tenant=?,notes=? WHERE id=?""",
         (u.unit_number, u.unit_type, u.purpose, u.floor, u.area_sqm,
-         u.rent_price, u.sale_price, 1 if u.is_available else 0, u.notes, uid))
+         u.rent_price, u.sale_price, 1 if u.is_available else 0, u.current_tenant, u.notes, uid))
     conn.commit()
     row = conn.execute("SELECT * FROM units WHERE id=?", (uid,)).fetchone()
     conn.close()
@@ -395,6 +494,51 @@ def delete_unit(uid: int):
     conn.execute("DELETE FROM units WHERE id=?", (uid,))
     conn.commit(); conn.close()
     return {"message": "Unidad eliminada", "id": uid}
+
+# ── Routes: Unit Services ──────────────────────────────────────────────────────
+@app.get("/api/units/{uid}/services")
+def get_unit_services(uid: int):
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM unit_services WHERE unit_id=? ORDER BY service_name", (uid,)).fetchall()
+    conn.close()
+    return rows_to_list(rows)
+
+@app.post("/api/units/{uid}/services", status_code=201)
+def create_unit_service(uid: int, s: UnitServiceIn):
+    conn = get_db()
+    unit = conn.execute("SELECT id FROM units WHERE id=?", (uid,)).fetchone()
+    if not unit: raise HTTPException(404, "Unidad no encontrada")
+    cur = conn.execute(
+        "INSERT INTO unit_services (unit_id, service_name, status, amount, notes) VALUES (?,?,?,?,?)",
+        (uid, s.service_name.upper(), s.status, s.amount, s.notes)
+    )
+    conn.commit()
+    row = conn.execute("SELECT * FROM unit_services WHERE id=?", (cur.lastrowid,)).fetchone()
+    conn.close()
+    return row_to_dict(row)
+
+@app.put("/api/unit-services/{sid}")
+def update_unit_service(sid: int, s: UnitServiceIn):
+    conn = get_db()
+    existing = conn.execute("SELECT id FROM unit_services WHERE id=?", (sid,)).fetchone()
+    if not existing:
+        conn.close()
+        raise HTTPException(404, "Servicio no encontrado")
+    conn.execute(
+        "UPDATE unit_services SET service_name=?, status=?, amount=?, notes=? WHERE id=?",
+        (s.service_name.upper(), s.status, s.amount, s.notes, sid)
+    )
+    conn.commit()
+    row = conn.execute("SELECT * FROM unit_services WHERE id=?", (sid,)).fetchone()
+    conn.close()
+    return row_to_dict(row)
+
+@app.delete("/api/unit-services/{sid}")
+def delete_unit_service(sid: int):
+    conn = get_db()
+    conn.execute("DELETE FROM unit_services WHERE id=?", (sid,))
+    conn.commit(); conn.close()
+    return {"message": "Servicio eliminado", "id": sid}
 
 # ── Routes: Contracts ─────────────────────────────────────────────────────────
 @app.get("/api/units/{uid}/contracts")

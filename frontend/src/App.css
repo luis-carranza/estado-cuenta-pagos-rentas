@@ -150,6 +150,29 @@ body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f4f8; color: #
 .unit-notes { font-size: 11px; color: #777; margin: 4px 0; font-style: italic; }
 .unit-actions { display: flex; gap: 6px; margin-top: 10px; align-items: center; }
 
+/* ── Unit Services ── */
+.unit-services { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+.svc-badge { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 20px; letter-spacing: 0.3px; text-transform: uppercase; }
+.svc-pagado   { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
+.svc-pendiente{ background: #fff8e1; color: #f57f17; border: 1px solid #ffe082; }
+.svc-vencido  { background: #fce4ec; color: #c62828; border: 1px solid #f48fb1; }
+
+/* ── Services in Modal ── */
+.services-section { margin-top: 20px; border-top: 1px solid #e3e9f0; padding-top: 16px; }
+.services-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.services-title { font-weight: 700; font-size: 13px; color: #1a3a6b; }
+.services-list { display: flex; flex-direction: column; gap: 6px; }
+.svc-empty { font-size: 12px; color: #aaa; font-style: italic; }
+.svc-row { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: #f7f9fc; border-radius: 6px; border: 1px solid #e3e9f0; }
+.svc-name { flex: 1; font-weight: 600; font-size: 12px; color: #333; }
+.svc-status-select { padding: 4px 8px; border-radius: 6px; font-size: 12px; border: 1px solid #d0d9e8; outline: none; cursor: pointer; font-weight: 600; }
+.svc-status-select.svc-pagado   { background: #e8f5e9; color: #2e7d32; border-color: #a5d6a7; }
+.svc-status-select.svc-pendiente{ background: #fff8e1; color: #f57f17; border-color: #ffe082; }
+.svc-status-select.svc-vencido  { background: #fce4ec; color: #c62828; border-color: #f48fb1; }
+.svc-add-row { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+.svc-name-input { flex: 1; min-width: 140px; padding: 7px 10px; border: 1px solid #d0d9e8; border-radius: 6px; font-size: 13px; outline: none; }
+.svc-name-input:focus { border-color: #1a3a6b; }
+
 /* ── Contracts ── */
 .contracts-list { display: flex; flex-direction: column; gap: 12px; }
 .contract-card { background: #fff; border-radius: 10px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); border: 1px solid #e3e9f0; }
