@@ -9,6 +9,8 @@ import ProjectsPage        from './components/ProjectsPage';
 import ProjectDetailsPage  from './components/ProjectDetailsPage';
 import UnitsPage           from './components/UnitsPage';
 import ContractsPage       from './components/ContractsPage';
+import BankStatementsPage  from './components/BankStatementsPage';
+import BankStatementDetailPage from './components/BankStatementDetailPage';
 import { getEstadoCuenta, getPagos, createPago, updatePago, deletePago } from './services/api';
 import { getProjects } from './services/api';
 import './App.css';
@@ -18,6 +20,7 @@ export default function App() {
   const [selProject, setProj]   = useState(null);
   const [detailProject, setDetailProj] = useState(null); // for details page
   const [selUnit, setUnit]       = useState(null);
+  const [selStatement, setSelStatement] = useState(null); // for bank detail
 
   // Estado de Cuenta state
   const [estadoCuenta, setEC]   = useState(null);
@@ -76,6 +79,7 @@ export default function App() {
     if (!['units','contracts','project-details'].includes(t)) {
       setProj(null); setUnit(null); setDetailProj(null);
     }
+    if (t !== 'banco-detail') setSelStatement(null);
   };
 
   return (
@@ -174,6 +178,21 @@ export default function App() {
             <h2 className="page-title">📁 Documentos</h2>
             <p style={{color:'#666',marginTop:'8px'}}>Accede a documentos desde un proyecto, unidad o contrato específico.</p>
           </div>
+        )}
+
+        {/* ── Bancos ── */}
+        {tab === 'bancos' && (
+          <BankStatementsPage
+            onOpenDetail={s => { setSelStatement(s); setTab('banco-detail'); }}
+          />
+        )}
+
+        {/* ── Detalle Estado de Banco ── */}
+        {tab === 'banco-detail' && selStatement && (
+          <BankStatementDetailPage
+            statement={selStatement}
+            onBack={() => setTab('bancos')}
+          />
         )}
       </main>
     </div>
