@@ -10,7 +10,8 @@ import {
   getProjectBudget, getDocuments, deleteDocument, uploadDocument,
   getProjectBankTransactions,
 } from '../services/api';
-import UnitsPage from './UnitsPage';
+import UnitsPage   from './UnitsPage';
+import ContractsPage from './ContractsPage';
 
 const fmt  = n => n != null ? new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN'}).format(n) : '—';
 const pct  = n => `${n ?? 0}%`;
@@ -355,9 +356,10 @@ const TABS = [
   { id: 'documents', label: 'Documentos',  icon: FolderOpen  },
 ];
 
-export default function ProjectDetailsPage({ project, onBack, onEditProject }) {
-  const [activeTab, setActiveTab] = useState('budget');
+export default function ProjectDetailsPage({ project, onBack, onEditProject, initialTab = 'budget' }) {
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [budget, setBudget]       = useState(null);
+  const [selUnit, setSelUnit]      = useState(null);  // unit selected for contracts sub-view
 
   useEffect(() => {
     getProjectBudget(project.id).then(setBudget).catch(() => toast.error('Error cargando presupuesto'));
@@ -397,7 +399,7 @@ export default function ProjectDetailsPage({ project, onBack, onEditProject }) {
         {TABS.map(t => (
           <button key={t.id}
             className={`detail-tab ${activeTab === t.id ? 'active' : ''}`}
-            onClick={() => setActiveTab(t.id)}>
+            onClick={() => { setActiveTab(t.id); setSelUnit(null); }}>
             <t.icon size={15}/> {t.label}
           </button>
         ))}
@@ -527,14 +529,21 @@ export default function ProjectDetailsPage({ project, onBack, onEditProject }) {
       )}
 
       {/* ══════════════════════════════════════════════════════
-          TAB: UNITS
+          TAB: UNITS  (+ inline contracts sub-view)
          ══════════════════════════════════════════════════════ */}
-      {activeTab === 'units' && (
+      {activeTab === 'units' && !selUnit && (
         <UnitsPage
           project={project}
           onBack={() => setActiveTab('budget')}
-          onSelectUnit={() => {}}
+          onSelectUnit={u => setSelUnit(u)}
           hideBackButton
+        />
+      )}
+      {activeTab === 'units' && selUnit && (
+        <ContractsPage
+          unit={selUnit}
+          project={project}
+          onBack={() => setSelUnit(null)}
         />
       )}
 

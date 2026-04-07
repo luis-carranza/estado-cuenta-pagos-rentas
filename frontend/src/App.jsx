@@ -7,8 +7,6 @@ import PagosTable          from './components/PagosTable';
 import PagoModal           from './components/PagoModal';
 import ProjectsPage        from './components/ProjectsPage';
 import ProjectDetailsPage  from './components/ProjectDetailsPage';
-import UnitsPage           from './components/UnitsPage';
-import ContractsPage       from './components/ContractsPage';
 import BankStatementsPage  from './components/BankStatementsPage';
 import BankStatementDetailPage from './components/BankStatementDetailPage';
 import { getEstadoCuenta, getPagos, createPago, updatePago, deletePago } from './services/api';
@@ -19,6 +17,7 @@ export default function App() {
   const [tab, setTab]           = useState('estado');
   const [selProject, setProj]   = useState(null);
   const [detailProject, setDetailProj] = useState(null); // for details page
+  const [initialProjectTab, setInitialProjectTab] = useState('budget');
   const [selUnit, setUnit]       = useState(null);
   const [selStatement, setSelStatement] = useState(null); // for bank detail
 
@@ -70,8 +69,8 @@ export default function App() {
     catch { toast.error('Error eliminando pago'); }
   };
 
-  const handleSelectProject = (p) => { setProj(p); setTab('units'); };
-  const handleViewDetails   = (p) => { setDetailProj(p); setTab('project-details'); };
+  const handleSelectProject = (p) => { setDetailProj(p); setTab('project-details'); setInitialProjectTab('units'); };
+  const handleViewDetails   = (p) => { setDetailProj(p); setTab('project-details'); setInitialProjectTab('budget'); };
   const handleSelectUnit    = (u) => { setUnit(u); setTab('contracts'); };
 
   const handleNavChange = t => {
@@ -79,6 +78,7 @@ export default function App() {
     if (!['units','contracts','project-details'].includes(t)) {
       setProj(null); setUnit(null); setDetailProj(null);
     }
+    if (t === 'projects') setInitialProjectTab('budget');
     if (t !== 'banco-detail') setSelStatement(null);
   };
 
@@ -150,27 +150,11 @@ export default function App() {
             project={detailProject}
             onBack={() => setTab('projects')}
             onEditProject={p => { setDetailProj(p); }}
+            initialTab={initialProjectTab}
           />
         )}
 
-        {/* ── Unidades ── */}
-        {tab === 'units' && selProject && (
-          <UnitsPage project={selProject}
-            onBack={() => setTab('projects')}
-            onSelectUnit={handleSelectUnit} />
-        )}
-        {tab === 'units' && !selProject && (
-          <div className="empty-state">Selecciona un proyecto desde la pestaña Proyectos.</div>
-        )}
-
-        {/* ── Contratos ── */}
-        {tab === 'contracts' && selUnit && (
-          <ContractsPage unit={selUnit} project={selProject}
-            onBack={() => setTab('units')} />
-        )}
-        {tab === 'contracts' && !selUnit && (
-          <div className="empty-state">Selecciona una unidad desde la pestaña Unidades.</div>
-        )}
+        {/* ── Unidades / Contratos are now inside ProjectDetailsPage ── */}
 
         {/* ── Documentos ── */}
         {tab === 'documents' && (
