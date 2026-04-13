@@ -1,0 +1,25 @@
+version: "3.9"
+
+services:
+  api:
+    build: .
+    restart: always
+    environment:
+      DB_FILE: /data/app.db
+      UPLOADS_DIR: /uploads
+      ALLOWED_ORIGINS: "http://YOUR_EC2_IP,https://YOUR_DOMAIN"
+    volumes:
+      - db_data:/data          # SQLite database — persists across restarts
+      - uploads_data:/uploads  # Uploaded documents
+    ports:
+      - "127.0.0.1:8000:8000" # only accessible locally (Nginx proxies to it)
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  db_data:
+  uploads_data:
+

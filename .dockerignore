@@ -1,0 +1,26 @@
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+dist/
+build/
+
+# ── Data files (never put in the image) ──────────────────────────────────────
+app.db
+uploads/
+*.xlsx
+inputs/
+
+# ── Frontend (built separately) ───────────────────────────────────────────────
+frontend/
+
+# ── Dev / CI ──────────────────────────────────────────────────────────────────
+.git/
+.gitignore
+*.md
+deploy/
+nginx/
+docker-compose.prod.yml
+

@@ -10,17 +10,20 @@ from pathlib import Path
 
 # ── Paths ────────────────────────────────────────────────────────────────────
 BASE_DIR   = Path(__file__).parent
-DB_FILE    = BASE_DIR / "app.db"
-UPLOADS    = BASE_DIR / "uploads"
+# Allow DB and uploads to be overridden via env (useful for Docker / AWS)
+DB_FILE    = Path(os.environ.get("DB_FILE",  str(BASE_DIR / "app.db")))
+UPLOADS    = Path(os.environ.get("UPLOADS_DIR", str(BASE_DIR / "uploads")))
 EXCEL_FILE = BASE_DIR / "edo cuenta pagos rentas Final.xlsx"
-UPLOADS.mkdir(exist_ok=True)
+UPLOADS.mkdir(parents=True, exist_ok=True)
 
 # ── App ──────────────────────────────────────────────────────────────────────
 app = FastAPI(title="Estado de Cuenta API", version="2.0.0")
+
+_extra_origins = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://localhost:5174",
-                   "http://localhost:3000", "http://127.0.0.1:5173"],
+                   "http://localhost:3000", "http://127.0.0.1:5173"] + _extra_origins,
     allow_credentials=True, allow_methods=["*"], allow_headers=["*"],
 )
 
